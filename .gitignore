@@ -1,0 +1,32 @@
+# Compiled Go binaries
+# `go build` drops the binary in the project root by default — don't commit it.
+x-clone-api
+*.exe
+*.test
+*.out
+
+# Go workspace + vendor
+# We use go modules, not the older GOPATH workspace. `vendor/` only appears if you run `go mod vendor`.
+go.work
+go.work.sum
+vendor/
+
+# Environment files
+# Real secrets. Never commit. Only .env.example is shared.
+.env
+.env.local
+.env.*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Coverage output from `go test -coverprofile`
+coverage.out
+coverage.html
+
+# Logs
+*.log
