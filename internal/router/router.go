@@ -4,12 +4,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/comments"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/posts"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/users"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-func New(env string, _ *gorm.DB) *gin.Engine {
+func New(env string, db *gorm.DB) *gin.Engine {
 	if env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -24,6 +27,11 @@ func New(env string, _ *gorm.DB) *gin.Engine {
 			"environment": env,
 		})
 	})
+
+	api := r.Group("/api")
+	users.Register(api, db)
+	posts.Register(api, db)
+	comments.Register(api, db)
 
 	return r
 }

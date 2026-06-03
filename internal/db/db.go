@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -29,4 +30,20 @@ func Connect(dsn string) *gorm.DB {
 
 	log.Println("postgres connected")
 	return gormDB
+}
+
+func Migrate(gormDB *gorm.DB) {
+	if err := gormDB.Exec(`CREATE EXTENSION IF NOT EXISTS pgcrypto`).Error; err != nil {
+		log.Fatalf("failed to enable pgcrypto extension: %v", err)
+	}
+
+	if err := gormDB.AutoMigrate(
+		&models.User{},
+		&models.Post{},
+		&models.Comment{},
+	); err != nil {
+		log.Fatalf("auto-migrate failed: %v", err)
+	}
+
+	log.Println("schema migrated")
 }

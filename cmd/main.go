@@ -18,6 +18,7 @@ import (
 func main() {
 	cfg := config.Load()
 	gormDB := db.Connect(cfg.DatabaseURL)
+	db.Migrate(gormDB)
 
 	r := router.New(cfg.Env, gormDB)
 
