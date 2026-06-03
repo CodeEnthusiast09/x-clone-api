@@ -13,14 +13,17 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/config"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/db"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/router"
+	"github.com/clerk/clerk-sdk-go/v2"
 )
 
 func main() {
 	cfg := config.Load()
+	clerk.SetKey(cfg.ClerkSecretKey)
+
 	gormDB := db.Connect(cfg.DatabaseURL)
 	db.Migrate(gormDB)
 
-	r := router.New(cfg.Env, gormDB)
+	r := router.New(cfg, gormDB)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

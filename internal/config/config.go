@@ -15,6 +15,7 @@ type Config struct {
 
 	ClerkSecretKey      string
 	ClerkPublishableKey string
+	ClerkWebhookSecret  string
 
 	CloudinaryCloudName string
 	CloudinaryAPIKey    string
@@ -35,6 +36,7 @@ func Load() *Config {
 		DatabaseURL:         mustGet("DATABASE_URL"),
 		ClerkSecretKey:      mustGet("CLERK_SECRET_KEY"),
 		ClerkPublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		ClerkWebhookSecret:  mustGet("CLERK_WEBHOOK_SECRET"),
 		CloudinaryCloudName: mustGet("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:    mustGet("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret: mustGet("CLOUDINARY_API_SECRET"),

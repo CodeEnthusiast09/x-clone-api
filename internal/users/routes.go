@@ -14,3 +14,13 @@ func Register(rg *gin.RouterGroup, db *gorm.DB) {
 		g.GET("/:username", h.GetByUsername)
 	}
 }
+
+// RegisterProtected registers routes that require an authenticated Clerk session.
+// The caller is responsible for attaching the auth middleware to rg.
+func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB) {
+	svc := NewService(db)
+	h := NewHandler(svc)
+
+	rg.GET("/me", h.Me)
+	rg.POST("/auth/sync", h.Sync)
+}
