@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -17,9 +18,12 @@ type Config struct {
 	ClerkPublishableKey string
 	ClerkWebhookSecret  string
 
-	CloudinaryCloudName string
-	CloudinaryAPIKey    string
-	CloudinaryAPISecret string
+	CloudinaryCloudName    string
+	CloudinaryAPIKey       string
+	CloudinaryAPISecret    string
+	CloudinaryUploadPreset string
+
+	PostImageMaxBytes int64
 
 	ArcjetKey string
 	ArcjetEnv string
@@ -31,20 +35,34 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
-		Env:                 getEnv("ENV", "development"),
-		DatabaseURL:         mustGet("DATABASE_URL"),
-		ClerkSecretKey:      mustGet("CLERK_SECRET_KEY"),
-		ClerkPublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
-		ClerkWebhookSecret:  mustGet("CLERK_WEBHOOK_SECRET"),
-		CloudinaryCloudName: mustGet("CLOUDINARY_CLOUD_NAME"),
-		CloudinaryAPIKey:    mustGet("CLOUDINARY_API_KEY"),
-		CloudinaryAPISecret: mustGet("CLOUDINARY_API_SECRET"),
-		ArcjetKey:           mustGet("ARCJET_KEY"),
-		ArcjetEnv:           getEnv("ARCJET_ENV", "development"),
+		Port:                   getEnv("PORT", "8080"),
+		Env:                    getEnv("ENV", "development"),
+		DatabaseURL:            mustGet("DATABASE_URL"),
+		ClerkSecretKey:         mustGet("CLERK_SECRET_KEY"),
+		ClerkPublishableKey:    os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		ClerkWebhookSecret:     mustGet("CLERK_WEBHOOK_SECRET"),
+		CloudinaryCloudName:    mustGet("CLOUDINARY_CLOUD_NAME"),
+		CloudinaryAPIKey:       mustGet("CLOUDINARY_API_KEY"),
+		CloudinaryAPISecret:    mustGet("CLOUDINARY_API_SECRET"),
+		CloudinaryUploadPreset: mustGet("CLOUDINARY_UPLOAD_PRESET"),
+		PostImageMaxBytes:      mustGetInt64("POST_IMAGE_MAX_BYTES"),
+		ArcjetKey:              mustGet("ARCJET_KEY"),
+		ArcjetEnv:              getEnv("ARCJET_ENV", "development"),
 	}
 
 	return cfg
+}
+
+func mustGetInt64(key string) int64 {
+	raw := mustGet(key)
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		log.Fatalf("invalid int64 value for %s: %v", key, err)
+	}
+	if n <= 0 {
+		log.Fatalf("env var %s must be a positive int64, got %d", key, n)
+	}
+	return n
 }
 
 func mustGet(key string) string {

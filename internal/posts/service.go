@@ -2,16 +2,35 @@ package posts
 
 import (
 	"errors"
+	"strings"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
+// PostImageNamespace is the public_id prefix under which all post-image uploads
+// must be stored. Combined with the uploader's clerkID, it forms an owner-scoped
+// path (e.g. "x_clone/posts/users/user_abc/<uuid>") that we validate on Create
+// (reject foreign URLs) and on Delete (gate the Cloudinary destroy call).
+const PostImageNamespace = "x_clone/posts/users"
+
 var (
-	ErrPostNotFound = errors.New("post not found")
-	ErrUserNotFound = errors.New("user not found")
+	ErrPostNotFound    = errors.New("post not found")
+	ErrUserNotFound    = errors.New("user not found")
+	ErrUserNotSynced   = errors.New("user not synced; call POST /api/auth/sync")
+	ErrEmptyPost       = errors.New("post must have content or image")
+	ErrInvalidImageURL = errors.New("image URL must be a Cloudinary asset uploaded by the caller")
 )
+
+// expectedImagePrefix returns the public_id prefix that identifies images
+// uploaded by the given clerkID. Used by both Create validation and the
+// pre-destroy check on Delete.
+func expectedImagePrefix(clerkID string) string {
+	return PostImageNamespace + "/" + clerkID + "/"
+}
 
 type Service struct {
 	db *gorm.DB
@@ -59,6 +78,129 @@ func (s *Service) GetByID(id uuid.UUID) (*models.Post, error) {
 		return nil, err
 	}
 	return &p, nil
+}
+
+// userIDFromClerk maps a Clerk subject to our internal user UUID.
+// Returns ErrUserNotSynced if the user hasn't been synced (webhook missed + /sync not called).
+func (s *Service) userIDFromClerk(clerkID string) (uuid.UUID, error) {
+	var u models.User
+	err := s.db.Select("id").Where("clerk_id = ?", clerkID).First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, ErrUserNotSynced
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return u.ID, nil
+}
+
+// Create inserts a new post for the authenticated user.
+// Returns the post with User preloaded so the mobile client can render immediately.
+//
+// If image is non-empty, its public_id must start with the caller's owner-scoped
+// prefix (PostImageNamespace + "/" + clerkID + "/"). Foreign URLs are rejected with
+// ErrInvalidImageURL — this prevents one user from "claiming" another user's
+// Cloudinary asset and then deleting it (the asset would still be theirs to destroy
+// since Cloudinary identifies assets by public_id, not by the owning post row).
+func (s *Service) Create(clerkID, content, image string) (*models.Post, error) {
+	content = strings.TrimSpace(content)
+	if content == "" && image == "" {
+		return nil, ErrEmptyPost
+	}
+
+	if image != "" {
+		publicID := cloudinary.PublicIDFromURL(image)
+		if publicID == "" || !strings.HasPrefix(publicID, expectedImagePrefix(clerkID)) {
+			return nil, ErrInvalidImageURL
+		}
+	}
+
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return nil, err
+	}
+
+	p := models.Post{
+		UserID:  userID,
+		Content: content,
+		Image:   image,
+	}
+	if err := s.db.Create(&p).Error; err != nil {
+		return nil, err
+	}
+	return s.GetByID(p.ID)
+}
+
+// Delete removes a post the caller owns. Single-query ownership: returns ErrPostNotFound
+// for both "doesn't exist" and "exists but not owned by caller" — avoids leaking existence
+// via a 403-vs-404 distinction. Returns the deleted post's image URL (empty if none) so
+// the caller can clean up the Cloudinary asset.
+func (s *Service) Delete(clerkID string, postID uuid.UUID) (string, error) {
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return "", err
+	}
+
+	var deleted models.Post
+	result := s.db.
+		Clauses(clause.Returning{Columns: []clause.Column{{Name: "image"}}}).
+		Where("id = ? AND user_id = ?", postID, userID).
+		Delete(&deleted)
+
+	if result.Error != nil {
+		return "", result.Error
+	}
+	if result.RowsAffected == 0 {
+		return "", ErrPostNotFound
+	}
+	return deleted.Image, nil
+}
+
+// Like adds the caller to a post's likers. Idempotent: re-liking is a no-op.
+// Returns ErrPostNotFound if the post doesn't exist.
+func (s *Service) Like(clerkID string, postID uuid.UUID) error {
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensurePostExists(postID); err != nil {
+		return err
+	}
+
+	return s.db.Exec(
+		"INSERT INTO post_likes (post_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+		postID, userID,
+	).Error
+}
+
+// Unlike removes the caller from a post's likers. Idempotent: unliking an unliked post is a no-op.
+// Returns ErrPostNotFound if the post itself doesn't exist.
+func (s *Service) Unlike(clerkID string, postID uuid.UUID) error {
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensurePostExists(postID); err != nil {
+		return err
+	}
+
+	return s.db.Exec(
+		"DELETE FROM post_likes WHERE post_id = ? AND user_id = ?",
+		postID, userID,
+	).Error
+}
+
+func (s *Service) ensurePostExists(postID uuid.UUID) error {
+	var count int64
+	if err := s.db.Model(&models.Post{}).Where("id = ?", postID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrPostNotFound
+	}
+	return nil
 }
 
 func (s *Service) ListByUsername(username string, page, limit int) ([]models.Post, int64, error) {

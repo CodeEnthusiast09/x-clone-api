@@ -4,18 +4,20 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/comments"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/config"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/posts"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/uploadsignatures"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/users"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/webhooks"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
+func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -43,6 +45,8 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	// Protected routes — require a valid Clerk JWT.
 	protected := api.Group("", middleware.RequireAuth())
 	users.RegisterProtected(protected, db)
+	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, cfg.PostImageMaxBytes, posts.PostImageNamespace)
+	posts.RegisterProtected(protected, db, cdn)
 
 	return r
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/config"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/db"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/router"
@@ -23,7 +24,13 @@ func main() {
 	gormDB := db.Connect(cfg.DatabaseURL)
 	db.Migrate(gormDB)
 
-	r := router.New(cfg, gormDB)
+	cdn := cloudinary.NewClient(
+		cfg.CloudinaryCloudName,
+		cfg.CloudinaryAPIKey,
+		cfg.CloudinaryAPISecret,
+	)
+
+	r := router.New(cfg, gormDB, cdn)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
