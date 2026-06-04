@@ -36,6 +36,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	// Public routes — read endpoints and webhooks (webhook auth happens via Svix signature).
 	users.Register(api, db)
 	posts.Register(api, db)
+	posts.RegisterUnderUsers(api, db)
 	comments.Register(api, db)
 	webhooks.Register(api, db, cfg.ClerkWebhookSecret)
 

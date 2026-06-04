@@ -13,6 +13,15 @@ func Register(rg *gin.RouterGroup, db *gorm.DB) {
 	{
 		g.GET("", h.List)
 		g.GET("/:postId", h.GetByID)
-		g.GET("/user/:username", h.ListByUsername)
 	}
+}
+
+// RegisterUnderUsers mounts post routes that are scoped to a specific user.
+// Lives under the /users prefix so URLs read naturally (e.g. /users/alice/posts).
+func RegisterUnderUsers(rg *gin.RouterGroup, db *gorm.DB) {
+	svc := NewService(db)
+	h := NewHandler(svc)
+
+	g := rg.Group("/users")
+	g.GET("/:username/posts", h.ListByUsername)
 }
