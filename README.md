@@ -17,7 +17,7 @@ A learning rebuild of [burakorkmez/x-clone-rn](https://github.com/burakorkmez/x-
 | Auth | Clerk (JWT verification via `clerk-sdk-go/v2`) |
 | Webhook verification | Svix (Clerk webhook signatures) |
 | Image upload | Cloudinary (presigned, direct-from-mobile uploads) |
-| Future: rate limit + bots | Arcjet |
+| Rate limit + bot detection | Arcjet (`arcjet-go`) |
 | Future: real-time chat | `gorilla/websocket` |
 | Env loading | `joho/godotenv` |
 
@@ -49,7 +49,11 @@ See `.env.example`. All of these are required at boot (`config.Load()` uses `mus
 | `CLOUDINARY_UPLOAD_PRESET` | Must equal the preset name created in the Cloudinary dashboard. Default: `x_clone_posts` (the preset is reused for every signed upload — name kept for backwards compat) |
 | `POST_IMAGE_MAX_BYTES` | Post-image cap, enforced server-side via signed params. Default: `5242880` (5 MB) |
 | `BANNER_IMAGE_MAX_BYTES` | User-banner cap, same enforcement mechanism. Default: `5242880` (5 MB, matching X) |
-| `ARCJET_KEY` / `ARCJET_ENV` | Read at boot; not wired into middleware yet (Phase 4) |
+| `ARCJET_KEY` | From the Arcjet dashboard. Required. |
+| `ARCJET_ENV` | `development` or `production`. Controls bot-detection mode: DryRun in dev (logs, allows), Live in prod (blocks). Defaults to `development`. |
+| `ARCJET_PUBLIC_RPM` | Public-read tier token-bucket refill (per IP per minute). Default: `60` |
+| `ARCJET_AUTH_RPM` | Authed-read tier (GET /me, PATCH /me, POST /auth/sync). Default: `30` |
+| `ARCJET_WRITE_RPM` | Authed-write tier (posts, likes, comments, follows, upload signatures). Default: `20` |
 
 ---
 
@@ -76,7 +80,7 @@ cmd/
 internal/
 ├── config/                  env loading + Config struct (mustGet for required vars)
 ├── db/                      GORM Postgres connect + AutoMigrate at startup
-├── middleware/              Clerk JWT auth (Arcjet + CORS will land here later)
+├── middleware/              Clerk JWT auth + Arcjet rate-limit/bot factories
 ├── models/                  GORM models — User, Post, Comment (UUID PKs via gen_random_uuid)
 ├── router/                  Gin engine + route registration coordinator
 ├── common/                  response envelope helpers — Success / Error / Paginated
@@ -89,7 +93,8 @@ internal/
 └── webhooks/                POST /api/webhooks/clerk (Svix-verified)
 scripts/
 ├── test-phase-3b.sh         e2e tests for Phase 3b (post writes + Cloudinary)
-└── test-phase-3c.sh         e2e tests for Phase 3c (comments, profile, banners, follows)
+├── test-phase-3c.sh         e2e tests for Phase 3c (comments, profile, banners, follows)
+└── test-phase-4.sh          e2e tests for Phase 4 (Arcjet tiers + bot detection)
 ```
 
 Each feature folder has the same three-file shape: `service.go` (DB + business logic), `handler.go` (HTTP layer), `routes.go` (registration).
@@ -156,6 +161,32 @@ Paginated reads add `meta`:
 
 ---
 
+## Rate limits and bot detection (Arcjet)
+
+Every `/api/*` route except webhooks goes through Arcjet. The base client always runs **Shield** (request-pattern attacks: SQLi, XSS, etc.) in Live mode and **DetectBot** in DryRun (dev) or Live (prod). On top of that, requests are split into three per-IP token-bucket tiers:
+
+| Tier | Default | Routes |
+|---|---|---|
+| Public read | `60/min` | All unauthenticated `GET` endpoints |
+| Authed read | `30/min` | `GET /api/me`, `PATCH /api/me`, `POST /api/auth/sync` |
+| Authed write | `20/min` | `POST/DELETE` on posts, likes, comments, follows, upload signatures |
+
+Tier choice is by **blast radius**, not HTTP verb — `PATCH /api/me` is a write but only mutates the caller's own row (no fanout, no public surface), so it groups with the other self-only routes at 30/min instead of being throttled like post creation.
+
+Excluded from Arcjet entirely:
+
+- `GET /health` — liveness probes always pass
+- `POST /api/webhooks/clerk` — Svix verifies the signature itself, and Clerk's callback volume would trip both rate limits and bot heuristics
+
+Implementation notes:
+
+- One `Protect` RPC per request: each tier derives a new client from the base via `client.WithRule(arcjet.TokenBucket(...))`, so Shield + DetectBot + TokenBucket are evaluated in a single call.
+- **Fail-open** on Arcjet errors: if the decide service blips, requests pass through with a logged warning rather than the API going down.
+- `RateLimit-*` response headers are written on every Arcjet-touched request so well-behaved clients can self-throttle before hitting 429.
+- Tunable via `ARCJET_PUBLIC_RPM` / `ARCJET_AUTH_RPM` / `ARCJET_WRITE_RPM` in `.env` — see the env-vars table above.
+
+---
+
 ## Gin routing gotchas worth remembering
 
 Gin uses a strict radix tree. Two rules:
@@ -189,12 +220,19 @@ Because mint + run happens locally (sub-second), Clerk's default 60-second JWT i
 To run:
 
 ```bash
-chmod +x scripts/test-phase-3b.sh scripts/test-phase-3c.sh
+chmod +x scripts/test-phase-3b.sh scripts/test-phase-3c.sh scripts/test-phase-4.sh
 ./scripts/test-phase-3b.sh
 ./scripts/test-phase-3c.sh
+./scripts/test-phase-4.sh
 ```
 
 `test-phase-3c.sh` additionally uses `psql` (and so `DATABASE_URL`) to seed and clean up a synthetic second user for the follow tests, since we can't easily spin up a real second Clerk identity per run.
+
+`test-phase-4.sh` verifies the Arcjet middleware: `/health` and webhook bypass, bot-detection DryRun behavior, and burst tests for all three rate-limit tiers. The burst tests deplete the per-IP buckets for ~1 minute; re-running the script before they refill will surface 429s from the start. Pass `SKIP_BURST=1` to skip them (useful in CI or when you don't want to pollute the Arcjet dashboard):
+
+```bash
+SKIP_BURST=1 ./scripts/test-phase-4.sh
+```
 
 To test against a different Clerk user without editing the script:
 
@@ -213,8 +251,8 @@ If there's no active session, open Clerk dashboard → click the test user → *
 - ✅ (3a) Clerk auth + webhooks + `/me` + `/sync` — `f04656f`
 - ✅ refactor: nest user-scoped post reads — `2a12164`
 - ✅ (3b) Cloudinary + post writes + IDOR-safe owner-scoped paths — `c97a910`
-- ✅ (3c) Comment writes + profile update + banner uploads + follow toggle
-- ⬜ (4) Arcjet middleware (rate limit + bot detection)
+- ✅ (3c) Comment writes + profile update + banner uploads + follow toggle — `b919a24`, `426148c`, `46ed09b`
+- ✅ (4) Arcjet middleware — Shield + bot detection + tiered rate limits — `ef76534`, `98dc729`
 - ⬜ (5) WebSocket chat (new feature vs the original — `gorilla/websocket`)
 - ⬜ (6) Mobile scaffold (separate repo: `x-clone-expo` — Expo SDK 54+, NativeWind, Yarn)
 - ⬜ (7) Port screens: auth → home → notifications → profile → search → messages
