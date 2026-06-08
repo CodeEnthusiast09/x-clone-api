@@ -22,5 +22,6 @@ func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB) {
 	h := NewHandler(svc)
 
 	rg.GET("/me", h.Me)
+	rg.PATCH("/me", h.UpdateMe)
 	rg.POST("/auth/sync", h.Sync)
 }

@@ -16,16 +16,18 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Create returns a short-lived signed upload token for a post image. The signed
-// params pin the upload to a public_id under the caller's owner-scoped prefix —
-// the mobile client must upload using the exact returned params or Cloudinary
-// will reject the request.
-func (h *Handler) Create(c *gin.Context) {
-	clerkID := c.GetString(middleware.ContextClerkID)
-	if clerkID == "" {
-		common.Error(c, http.StatusUnauthorized, "missing authentication context")
-		return
+// CreateFor returns a gin.HandlerFunc bound to a specific upload namespace and
+// size cap. Used to register multiple signature endpoints (e.g. /posts,
+// /banners) off a single Handler — each endpoint produces signed params that
+// pin the upload to a different owner-scoped Cloudinary path.
+func (h *Handler) CreateFor(namespace string, maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		clerkID := c.GetString(middleware.ContextClerkID)
+		if clerkID == "" {
+			common.Error(c, http.StatusUnauthorized, "missing authentication context")
+			return
+		}
+		sig := h.svc.Sign(clerkID, namespace, maxBytes)
+		common.Success(c, http.StatusOK, "upload signature generated", sig)
 	}
-	sig := h.svc.SignPostUpload(clerkID)
-	common.Success(c, http.StatusOK, "upload signature generated", sig)
 }

@@ -23,7 +23,8 @@ type Config struct {
 	CloudinaryAPISecret    string
 	CloudinaryUploadPreset string
 
-	PostImageMaxBytes int64
+	PostImageMaxBytes   int64
+	BannerImageMaxBytes int64
 
 	ArcjetKey string
 	ArcjetEnv string
@@ -46,6 +47,7 @@ func Load() *Config {
 		CloudinaryAPISecret:    mustGet("CLOUDINARY_API_SECRET"),
 		CloudinaryUploadPreset: mustGet("CLOUDINARY_UPLOAD_PRESET"),
 		PostImageMaxBytes:      mustGetInt64("POST_IMAGE_MAX_BYTES"),
+		BannerImageMaxBytes:    mustGetInt64("BANNER_IMAGE_MAX_BYTES"),
 		ArcjetKey:              mustGet("ARCJET_KEY"),
 		ArcjetEnv:              getEnv("ARCJET_ENV", "development"),
 	}

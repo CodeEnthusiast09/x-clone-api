@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkuser "github.com/clerk/clerk-sdk-go/v2/user"
@@ -13,7 +14,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+// BannerImageNamespace is the public_id prefix under which all user-banner uploads
+// must be stored. Combined with the uploader's clerkID, it forms an owner-scoped
+// path (e.g. "x_clone/banners/users/user_abc/<uuid>") that PATCH /me validates
+// against — same defense-in-depth pattern used for post images.
+const BannerImageNamespace = "x_clone/banners/users"
+
+var (
+	ErrUserNotFound      = errors.New("user not found")
+	ErrEmptyUpdate       = errors.New("at least one field must be provided")
+	ErrInvalidBannerURL  = errors.New("banner URL must be a Cloudinary asset uploaded by the caller")
+)
+
+// expectedBannerPrefix returns the public_id prefix that identifies banner
+// images uploaded by the given clerkID. Used to validate the bannerImage URL
+// on PATCH /me before persisting it.
+func expectedBannerPrefix(clerkID string) string {
+	return BannerImageNamespace + "/" + clerkID + "/"
+}
 
 type Service struct {
 	db *gorm.DB
@@ -75,6 +93,63 @@ func (s *Service) UpsertFromClerk(clerkID, email, firstName, lastName, profilePi
 	}
 
 	// Re-read so we get the row's id + timestamps regardless of insert vs update.
+	return s.GetByClerkID(clerkID)
+}
+
+// UpdateProfileInput is the partial-update payload for PATCH /me. Pointer fields
+// distinguish "not provided" (nil) from "explicitly cleared" (pointer to "").
+type UpdateProfileInput struct {
+	FirstName   *string
+	LastName    *string
+	Bio         *string
+	Location    *string
+	BannerImage *string
+}
+
+// UpdateProfile applies a partial update to the authenticated user's row.
+// Returns ErrEmptyUpdate if no fields were provided, ErrInvalidBannerURL if
+// bannerImage is non-empty but its public_id doesn't start with the caller's
+// owner-scoped prefix.
+func (s *Service) UpdateProfile(clerkID string, in UpdateProfileInput) (*models.User, error) {
+	updates := map[string]any{}
+
+	if in.FirstName != nil {
+		updates["first_name"] = strings.TrimSpace(*in.FirstName)
+	}
+	if in.LastName != nil {
+		updates["last_name"] = strings.TrimSpace(*in.LastName)
+	}
+	if in.Bio != nil {
+		updates["bio"] = strings.TrimSpace(*in.Bio)
+	}
+	if in.Location != nil {
+		updates["location"] = strings.TrimSpace(*in.Location)
+	}
+	if in.BannerImage != nil {
+		url := strings.TrimSpace(*in.BannerImage)
+		if url != "" {
+			publicID := cloudinary.PublicIDFromURL(url)
+			if publicID == "" || !strings.HasPrefix(publicID, expectedBannerPrefix(clerkID)) {
+				return nil, ErrInvalidBannerURL
+			}
+		}
+		updates["banner_image"] = url
+	}
+
+	if len(updates) == 0 {
+		return nil, ErrEmptyUpdate
+	}
+
+	res := s.db.Model(&models.User{}).
+		Where("clerk_id = ?", clerkID).
+		Updates(updates)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, ErrUserNotFound
+	}
+
 	return s.GetByClerkID(clerkID)
 }
 

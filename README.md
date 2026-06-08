@@ -46,8 +46,9 @@ See `.env.example`. All of these are required at boot (`config.Load()` uses `mus
 | `CLERK_PUBLISHABLE_KEY` | Stored only; mobile uses it |
 | `CLERK_WEBHOOK_SECRET` | From Clerk dashboard → Webhooks endpoint |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | From Cloudinary dashboard |
-| `CLOUDINARY_UPLOAD_PRESET` | Must equal the preset name created in the Cloudinary dashboard. Default: `x_clone_posts` |
-| `POST_IMAGE_MAX_BYTES` | Enforced server-side by Cloudinary via signed params. Default: `5242880` (5 MB) |
+| `CLOUDINARY_UPLOAD_PRESET` | Must equal the preset name created in the Cloudinary dashboard. Default: `x_clone_posts` (the preset is reused for every signed upload — name kept for backwards compat) |
+| `POST_IMAGE_MAX_BYTES` | Post-image cap, enforced server-side via signed params. Default: `5242880` (5 MB) |
+| `BANNER_IMAGE_MAX_BYTES` | User-banner cap, same enforcement mechanism. Default: `5242880` (5 MB, matching X) |
 | `ARCJET_KEY` / `ARCJET_ENV` | Read at boot; not wired into middleware yet (Phase 4) |
 
 ---
@@ -112,12 +113,16 @@ Each feature folder has the same three-file shape: `service.go` (DB + business l
 | Method | Path | Description |
 |---|---|---|
 | `GET`    | `/api/me` | the authed user's row in our DB |
+| `PATCH`  | `/api/me` | partial profile update (firstName, lastName, bio, location, bannerImage) |
 | `POST`   | `/api/auth/sync` | fallback when the webhook hasn't created the user yet; idempotent |
-| `POST`   | `/api/upload-signatures` | signed Cloudinary upload params (user-scoped public_id) |
+| `POST`   | `/api/upload-signatures/posts` | signed Cloudinary upload params for a post image (user-scoped public_id) |
+| `POST`   | `/api/upload-signatures/banners` | signed Cloudinary upload params for a banner image (user-scoped public_id) |
 | `POST`   | `/api/posts` | create post (text and/or image) |
 | `DELETE` | `/api/posts/:postId` | delete (single-query ownership + Cloudinary destroy) |
 | `POST`   | `/api/posts/:postId/likes` | like (idempotent, 204) |
 | `DELETE` | `/api/posts/:postId/likes` | unlike (idempotent, 204) |
+| `POST`   | `/api/posts/:postId/comments` | create a comment (text only, <=280 chars) |
+| `DELETE` | `/api/comments/:commentId` | delete a comment (single-query ownership) |
 
 ### Response envelope
 
@@ -139,8 +144,9 @@ Paginated reads add `meta`:
 
 ## Security notes worth remembering
 
-- **Cloudinary upload public_ids are owner-scoped**: `x_clone/posts/users/<clerkID>/<uuid>`. The public_id is included in the signed params, so the mobile client cannot upload to a different path without invalidating the signature.
-- **Post creation rejects foreign image URLs**: if you `POST /api/posts` with `image: "<URL>"` whose extracted public_id doesn't start with your prefix, you get **400**. Prevents an IDOR where one user references another user's Cloudinary asset on their own post and then deletes it.
+- **Cloudinary upload public_ids are owner-scoped**: posts land under `x_clone/posts/users/<clerkID>/<uuid>`, banners under `x_clone/banners/users/<clerkID>/<uuid>`. The public_id is included in the signed params, so the mobile client cannot upload to a different path without invalidating the signature.
+- **Post creation rejects foreign image URLs**: if you `POST /api/posts` with `image: "<URL>"` whose extracted public_id doesn't start with your posts prefix, you get **400**. Prevents an IDOR where one user references another user's Cloudinary asset on their own post and then deletes it.
+- **`PATCH /api/me` applies the same check to `bannerImage`**: the URL must extract a public_id starting with `x_clone/banners/users/<clerkID>/`. Same defense pattern, applied at write time.
 - **Single-query ownership for DELETE**: `DELETE FROM posts WHERE id=? AND user_id=?`. Returns 404 for both "doesn't exist" and "exists but not yours" — avoids leaking existence via 403-vs-404.
 - **Webhook signatures verified** via Svix using `CLERK_WEBHOOK_SECRET` — unsigned requests get 401 before any DB work.
 

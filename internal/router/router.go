@@ -45,7 +45,10 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	// Protected routes — require a valid Clerk JWT.
 	protected := api.Group("", middleware.RequireAuth())
 	users.RegisterProtected(protected, db)
-	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, cfg.PostImageMaxBytes, posts.PostImageNamespace)
+	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, []uploadsignatures.Mount{
+		{Path: "/upload-signatures/posts", Namespace: posts.PostImageNamespace, MaxBytes: cfg.PostImageMaxBytes},
+		{Path: "/upload-signatures/banners", Namespace: users.BannerImageNamespace, MaxBytes: cfg.BannerImageMaxBytes},
+	})
 	posts.RegisterProtected(protected, db, cdn)
 	comments.RegisterUnderPosts(protected, db)
 	comments.RegisterProtected(protected, db)
