@@ -2,6 +2,7 @@ package conversations
 
 import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -16,7 +17,11 @@ func NewHandler(svc *Service) *Handler {
 
 // StartOrGet  POST /api/conversations
 func (h *Handler) StartOrGet(c *gin.Context) {
-	callerID := c.MustGet("userID").(uuid.UUID)
+	clerkID := c.GetString(middleware.ContextClerkID)
+	if clerkID == "" {
+		common.Error(c, 401, "unauthorized")
+		return
+	}
 
 	var in struct {
 		RecipientID uuid.UUID `json:"recipientId" binding:"required"`
@@ -26,12 +31,17 @@ func (h *Handler) StartOrGet(c *gin.Context) {
 		return
 	}
 
-	if callerID == in.RecipientID {
+	callerDBID, err := h.svc.userIDFromClerk(clerkID)
+	if err != nil {
+		common.Error(c, 500, "failed to resolve caller")
+		return
+	}
+	if callerDBID == in.RecipientID {
 		common.Error(c, 400, "cannot start a conversation with yourself")
 		return
 	}
 
-	conv, err := h.svc.GetOrCreate(callerID, in.RecipientID)
+	conv, err := h.svc.GetOrCreate(clerkID, in.RecipientID)
 	if err != nil {
 		common.Error(c, 500, "failed to get or create conversation")
 		return
@@ -42,13 +52,17 @@ func (h *Handler) StartOrGet(c *gin.Context) {
 
 // List  GET /api/conversations
 func (h *Handler) List(c *gin.Context) {
-	callerID := c.MustGet("userID").(uuid.UUID)
+	clerkID := c.GetString(middleware.ContextClerkID)
+	if clerkID == "" {
+		common.Error(c, 401, "unauthorized")
+		return
+	}
 
-	convs, err := h.svc.ListForUser(callerID)
+	views, err := h.svc.ListForUser(clerkID)
 	if err != nil {
 		common.Error(c, 500, "failed to list conversations")
 		return
 	}
 
-	common.Success(c, 200, "ok", convs)
+	common.Success(c, 200, "ok", views)
 }

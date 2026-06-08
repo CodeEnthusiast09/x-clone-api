@@ -5,6 +5,7 @@ import (
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/conversations"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -20,7 +21,11 @@ func NewHandler(svc *Service, convSvc *conversations.Service) *Handler {
 
 // List  GET /api/conversations/:conversationId/messages
 func (h *Handler) List(c *gin.Context) {
-	callerID := c.MustGet("userID").(uuid.UUID)
+	clerkID := c.GetString(middleware.ContextClerkID)
+	if clerkID == "" {
+		common.Error(c, 401, "unauthorized")
+		return
+	}
 
 	convID, err := uuid.Parse(c.Param("conversationId"))
 	if err != nil {
@@ -28,7 +33,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	conv, err := h.convSvc.GetByID(convID, callerID)
+	conv, err := h.convSvc.GetByID(convID, clerkID)
 	if err != nil {
 		common.Error(c, 500, "failed to fetch conversation")
 		return
@@ -67,7 +72,11 @@ func (h *Handler) List(c *gin.Context) {
 
 // MarkRead  PATCH /api/conversations/:conversationId/read
 func (h *Handler) MarkRead(c *gin.Context) {
-	callerID := c.MustGet("userID").(uuid.UUID)
+	clerkID := c.GetString(middleware.ContextClerkID)
+	if clerkID == "" {
+		common.Error(c, 401, "unauthorized")
+		return
+	}
 
 	convID, err := uuid.Parse(c.Param("conversationId"))
 	if err != nil {
@@ -75,7 +84,7 @@ func (h *Handler) MarkRead(c *gin.Context) {
 		return
 	}
 
-	conv, err := h.convSvc.GetByID(convID, callerID)
+	conv, err := h.convSvc.GetByID(convID, clerkID)
 	if err != nil {
 		common.Error(c, 500, "failed to fetch conversation")
 		return
@@ -85,7 +94,7 @@ func (h *Handler) MarkRead(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.svc.MarkRead(convID, callerID)
+	updated, err := h.svc.MarkRead(convID, clerkID)
 	if err != nil {
 		common.Error(c, 500, "failed to mark messages as read")
 		return

@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"errors"
 	"time"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
@@ -17,6 +18,7 @@ func NewService(db *gorm.DB) *Service {
 }
 
 // Create inserts a new message and returns it with the Sender preloaded.
+// senderID is a DB UUID (supplied by the WebSocket handler after resolving clerkID).
 func (s *Service) Create(conversationID, senderID uuid.UUID, body string) (*models.Message, error) {
 	msg := models.Message{
 		ConversationID: conversationID,
@@ -51,11 +53,24 @@ func (s *Service) ListForConversation(conversationID uuid.UUID, page, limit int)
 }
 
 // MarkRead sets read_at = now() for all unread messages in a conversation that
-// were NOT sent by callerID. Returns the number of rows updated.
-func (s *Service) MarkRead(conversationID, callerID uuid.UUID) (int64, error) {
+// were NOT sent by the caller. Returns the number of rows updated.
+func (s *Service) MarkRead(conversationID uuid.UUID, callerClerkID string) (int64, error) {
+	callerID, err := s.userIDFromClerk(callerClerkID)
+	if err != nil {
+		return 0, err
+	}
 	now := time.Now()
 	result := s.db.Model(&models.Message{}).
 		Where("conversation_id = ? AND sender_id != ? AND read_at IS NULL", conversationID, callerID).
 		Update("read_at", now)
 	return result.RowsAffected, result.Error
+}
+
+func (s *Service) userIDFromClerk(clerkID string) (uuid.UUID, error) {
+	var u models.User
+	err := s.db.Select("id").Where("clerk_id = ?", clerkID).First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, errors.New("user not synced")
+	}
+	return u.ID, err
 }
