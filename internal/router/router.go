@@ -45,31 +45,46 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 
 	// Webhooks are NOT behind Arcjet -- Svix verifies the signature itself,
 	// and we want Clerk's high-volume callbacks to never trip rate limits or
-	// bot heuristics. Mount before the Arcjet-protected sub-group so this
-	// group inherits no Arcjet middleware.
+	// bot heuristics. Mount before any Arcjet-protected sub-group so this
+	// path inherits no Arcjet middleware.
 	webhooks.Register(api, db, cfg.ClerkWebhookSecret)
 
-	// Everything else flows through Arcjet first.
-	guarded := api.Group("", middleware.Arcjet(ajClient))
+	// Three rate-limit tiers, each derived from the base Arcjet client by
+	// adding a TokenBucket rule keyed on ip.src. One Arcjet RPC per request.
+	publicLimit, err := middleware.RateLimit(ajClient, cfg.ArcjetPublicRPM)
+	if err != nil {
+		log.Fatalf("arcjet public rate-limit init: %v", err)
+	}
+	authLimit, err := middleware.RateLimit(ajClient, cfg.ArcjetAuthRPM)
+	if err != nil {
+		log.Fatalf("arcjet auth rate-limit init: %v", err)
+	}
+	writeLimit, err := middleware.RateLimit(ajClient, cfg.ArcjetWriteRPM)
+	if err != nil {
+		log.Fatalf("arcjet write rate-limit init: %v", err)
+	}
 
-	// Public routes — read endpoints, no Clerk auth.
-	users.Register(guarded, db)
-	posts.Register(guarded, db)
-	posts.RegisterUnderUsers(guarded, db)
-	comments.Register(guarded, db)
+	// Public reads — unauthenticated GETs. Highest budget.
+	publicReads := api.Group("", publicLimit)
+	users.Register(publicReads, db)
+	posts.Register(publicReads, db)
+	posts.RegisterUnderUsers(publicReads, db)
+	comments.Register(publicReads, db)
 
-	// Protected routes — require a valid Clerk JWT. Arcjet middleware
-	// inherited from the parent guarded group runs before RequireAuth.
-	protected := guarded.Group("", middleware.RequireAuth())
-	users.RegisterProtected(protected, db)
-	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, []uploadsignatures.Mount{
+	// Authed reads / lightweight profile actions — require Clerk JWT.
+	authedReads := api.Group("", authLimit, middleware.RequireAuth())
+	users.RegisterProtected(authedReads, db)
+
+	// Authed writes — every mutation goes here. Lowest budget.
+	authedWrites := api.Group("", writeLimit, middleware.RequireAuth())
+	uploadsignatures.RegisterProtected(authedWrites, cdn, cfg.CloudinaryUploadPreset, []uploadsignatures.Mount{
 		{Path: "/upload-signatures/posts", Namespace: posts.PostImageNamespace, MaxBytes: cfg.PostImageMaxBytes},
 		{Path: "/upload-signatures/banners", Namespace: users.BannerImageNamespace, MaxBytes: cfg.BannerImageMaxBytes},
 	})
-	posts.RegisterProtected(protected, db, cdn)
-	comments.RegisterUnderPosts(protected, db)
-	comments.RegisterProtected(protected, db)
-	follows.RegisterProtected(protected, db)
+	posts.RegisterProtected(authedWrites, db, cdn)
+	comments.RegisterUnderPosts(authedWrites, db)
+	comments.RegisterProtected(authedWrites, db)
+	follows.RegisterProtected(authedWrites, db)
 
 	return r
 }

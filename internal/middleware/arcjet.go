@@ -3,6 +3,7 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/arcjet/arcjet-go"
@@ -35,11 +36,33 @@ func NewArcjetClient(key, env string) (*arcjet.Client, error) {
 	})
 }
 
-// Arcjet returns a gin.HandlerFunc that evaluates the request against the
-// configured rules. Fails open on Arcjet errors -- per Arcjet's own guidance,
-// a security middleware should not take down a working API when the upstream
+// RateLimit derives a tier-specific Arcjet client from the base by adding a
+// token-bucket rule keyed on the caller's IP, then returns a gin.HandlerFunc
+// that runs Protect against the derived client. One Arcjet RPC per request --
+// the bucket rule is composed with Shield + DetectBot from the base.
+//
+// rpm = sustained requests per minute. Capacity is set to rpm so a fresh
+// bucket allows a small burst up to the same value before refill throttling
+// kicks in.
+func RateLimit(base *arcjet.Client, rpm int) (gin.HandlerFunc, error) {
+	tierClient, err := base.WithRule(arcjet.TokenBucket(arcjet.TokenBucketOptions{
+		Mode:            arcjet.ModeLive,
+		Characteristics: []string{"ip.src"},
+		RefillRate:      rpm,
+		Interval:        time.Minute,
+		Capacity:        rpm,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return protectWith(tierClient), nil
+}
+
+// protectWith is the shared decision pipeline used by every Arcjet-backed
+// middleware. Fails open on Arcjet errors -- per Arcjet's own guidance, a
+// security middleware should not take down a working API when the upstream
 // decide service blips.
-func Arcjet(client *arcjet.Client) gin.HandlerFunc {
+func protectWith(client *arcjet.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		decision, err := client.Protect(c.Request.Context(), c.Request)
 		if err != nil {

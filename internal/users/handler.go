@@ -85,13 +85,7 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	user, err := h.svc.UpdateProfile(clerkID, UpdateProfileInput{
-		FirstName:   in.FirstName,
-		LastName:    in.LastName,
-		Bio:         in.Bio,
-		Location:    in.Location,
-		BannerImage: in.BannerImage,
-	})
+	user, err := h.svc.UpdateProfile(clerkID, UpdateProfileInput(in))
 	if errors.Is(err, ErrEmptyUpdate) {
 		common.Error(c, http.StatusBadRequest, "at least one field must be provided")
 		return

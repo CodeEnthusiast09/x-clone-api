@@ -26,8 +26,11 @@ type Config struct {
 	PostImageMaxBytes   int64
 	BannerImageMaxBytes int64
 
-	ArcjetKey string
-	ArcjetEnv string
+	ArcjetKey       string
+	ArcjetEnv       string
+	ArcjetPublicRPM int
+	ArcjetAuthRPM   int
+	ArcjetWriteRPM  int
 }
 
 func Load() *Config {
@@ -50,6 +53,9 @@ func Load() *Config {
 		BannerImageMaxBytes:    mustGetInt64("BANNER_IMAGE_MAX_BYTES"),
 		ArcjetKey:              mustGet("ARCJET_KEY"),
 		ArcjetEnv:              getEnv("ARCJET_ENV", "development"),
+		ArcjetPublicRPM:        mustGetInt("ARCJET_PUBLIC_RPM"),
+		ArcjetAuthRPM:          mustGetInt("ARCJET_AUTH_RPM"),
+		ArcjetWriteRPM:         mustGetInt("ARCJET_WRITE_RPM"),
 	}
 
 	return cfg
@@ -63,6 +69,18 @@ func mustGetInt64(key string) int64 {
 	}
 	if n <= 0 {
 		log.Fatalf("env var %s must be a positive int64, got %d", key, n)
+	}
+	return n
+}
+
+func mustGetInt(key string) int {
+	raw := mustGet(key)
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		log.Fatalf("invalid int value for %s: %v", key, err)
+	}
+	if n <= 0 {
+		log.Fatalf("env var %s must be a positive int, got %d", key, n)
 	}
 	return n
 }

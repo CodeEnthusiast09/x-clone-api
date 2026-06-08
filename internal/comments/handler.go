@@ -55,7 +55,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	var in createCommentInput
-	if err := c.ShouldBindJSON(&in); err != nil {
+	if err = c.ShouldBindJSON(&in); err != nil {
 		common.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

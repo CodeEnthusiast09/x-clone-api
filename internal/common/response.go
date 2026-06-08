@@ -2,7 +2,7 @@ package common
 
 import "github.com/gin-gonic/gin"
 
-type ApiResponse struct {
+type APIResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Data    any    `json:"data,omitempty"`
@@ -23,7 +23,7 @@ type PaginatedResponse struct {
 }
 
 func Success(c *gin.Context, status int, message string, data any) {
-	c.JSON(status, ApiResponse{
+	c.JSON(status, APIResponse{
 		Success: true,
 		Message: message,
 		Data:    data,
@@ -31,7 +31,7 @@ func Success(c *gin.Context, status int, message string, data any) {
 }
 
 func Error(c *gin.Context, status int, message string) {
-	c.JSON(status, ApiResponse{
+	c.JSON(status, APIResponse{
 		Success: false,
 		Message: message,
 	})

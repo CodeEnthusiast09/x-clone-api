@@ -218,7 +218,7 @@ func (s *Service) ListByUsername(username string, page, limit int) ([]models.Pos
 		total int64
 	)
 
-	if err := s.db.Model(&models.Post{}).Where("user_id = ?", user.ID).Count(&total).Error; err != nil {
+	if err = s.db.Model(&models.Post{}).Where("user_id = ?", user.ID).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 

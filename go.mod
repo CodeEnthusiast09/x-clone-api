@@ -3,6 +3,7 @@ module github.com/CodeEnthusiast09/x-clone-api
 go 1.26.3
 
 require (
+	github.com/arcjet/arcjet-go v0.0.0-20260602194256-13efd805028c
 	github.com/clerk/clerk-sdk-go/v2 v2.6.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
@@ -14,7 +15,6 @@ require (
 
 require (
 	connectrpc.com/connect v1.19.2 // indirect
-	github.com/arcjet/arcjet-go v0.0.0-20260602194256-13efd805028c // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
