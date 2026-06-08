@@ -9,7 +9,9 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/comments"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/config"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/conversations"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/follows"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/messages"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/posts"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/uploadsignatures"
@@ -74,6 +76,8 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	// Authed reads / lightweight profile actions — require Clerk JWT.
 	authedReads := api.Group("", authLimit, middleware.RequireAuth())
 	users.RegisterProtected(authedReads, db)
+	conversations.Register(authedReads, db)
+	messages.Register(authedReads, db)
 
 	// Authed writes — every mutation goes here. Lowest budget.
 	authedWrites := api.Group("", writeLimit, middleware.RequireAuth())
@@ -85,6 +89,8 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	comments.RegisterUnderPosts(authedWrites, db)
 	comments.RegisterProtected(authedWrites, db)
 	follows.RegisterProtected(authedWrites, db)
+	conversations.RegisterProtected(authedWrites, db)
+	messages.RegisterProtected(authedWrites, db)
 
 	return r
 }
