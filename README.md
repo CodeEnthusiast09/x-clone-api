@@ -49,8 +49,7 @@ See `.env.example`. All of these are required at boot (`config.Load()` uses `mus
 | `CLOUDINARY_UPLOAD_PRESET` | Must equal the preset name created in the Cloudinary dashboard. Default: `x_clone_posts` (the preset is reused for every signed upload — name kept for backwards compat) |
 | `POST_IMAGE_MAX_BYTES` | Post-image cap, enforced server-side via signed params. Default: `5242880` (5 MB) |
 | `BANNER_IMAGE_MAX_BYTES` | User-banner cap, same enforcement mechanism. Default: `5242880` (5 MB, matching X) |
-| `ARCJET_KEY` | From the Arcjet dashboard. Required. |
-| `ARCJET_ENV` | `development` or `production`. Controls bot-detection mode: DryRun in dev (logs, allows), Live in prod (blocks). Defaults to `development`. |
+| `ARCJET_KEY` | From the Arcjet dashboard. Required. Bot-detection mode (DryRun in dev / Live in prod) is derived from the app's `ENV` var, not a separate Arcjet env. |
 | `ARCJET_PUBLIC_RPM` | Public-read tier token-bucket refill (per IP per minute). Default: `60` |
 | `ARCJET_AUTH_RPM` | Authed-read tier (GET /me, PATCH /me, POST /auth/sync). Default: `30` |
 | `ARCJET_WRITE_RPM` | Authed-write tier (posts, likes, comments, follows, upload signatures). Default: `20` |

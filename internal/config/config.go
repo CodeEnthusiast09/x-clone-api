@@ -27,7 +27,6 @@ type Config struct {
 	BannerImageMaxBytes int64
 
 	ArcjetKey       string
-	ArcjetEnv       string
 	ArcjetPublicRPM int
 	ArcjetAuthRPM   int
 	ArcjetWriteRPM  int
@@ -52,7 +51,6 @@ func Load() *Config {
 		PostImageMaxBytes:      mustGetInt64("POST_IMAGE_MAX_BYTES"),
 		BannerImageMaxBytes:    mustGetInt64("BANNER_IMAGE_MAX_BYTES"),
 		ArcjetKey:              mustGet("ARCJET_KEY"),
-		ArcjetEnv:              getEnv("ARCJET_ENV", "development"),
 		ArcjetPublicRPM:        mustGetInt("ARCJET_PUBLIC_RPM"),
 		ArcjetAuthRPM:          mustGetInt("ARCJET_AUTH_RPM"),
 		ArcjetWriteRPM:         mustGetInt("ARCJET_WRITE_RPM"),

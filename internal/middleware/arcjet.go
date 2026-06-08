@@ -45,12 +45,17 @@ func NewArcjetClient(key, env string) (*arcjet.Client, error) {
 // bucket allows a small burst up to the same value before refill throttling
 // kicks in.
 func RateLimit(base *arcjet.Client, rpm int) (gin.HandlerFunc, error) {
+	// Characteristics is intentionally omitted -- per the Arcjet Go SDK
+	// README, omitting it defaults to IP-based bucketing (the SDK auto-
+	// derives the source IP from the request). Setting it to
+	// []string{"ip.src"} makes Arcjet wait for a per-request value supplied
+	// via WithCharacteristics(), which we never provide, so the bucket
+	// silently never keys -> no enforcement.
 	tierClient, err := base.WithRule(arcjet.TokenBucket(arcjet.TokenBucketOptions{
-		Mode:            arcjet.ModeLive,
-		Characteristics: []string{"ip.src"},
-		RefillRate:      rpm,
-		Interval:        time.Minute,
-		Capacity:        rpm,
+		Mode:       arcjet.ModeLive,
+		RefillRate: rpm,
+		Interval:   time.Minute,
+		Capacity:   rpm,
 	}))
 	if err != nil {
 		return nil, err
@@ -64,7 +69,10 @@ func RateLimit(base *arcjet.Client, rpm int) (gin.HandlerFunc, error) {
 // decide service blips.
 func protectWith(client *arcjet.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		decision, err := client.Protect(c.Request.Context(), c.Request)
+		// WithRequested(1) -- TokenBucket requires the per-request token
+		// cost on every Protect call. Without it Arcjet returns an ERROR
+		// conclusion and the bucket is never decremented (silent fail-open).
+		decision, err := client.Protect(c.Request.Context(), c.Request, arcjet.WithRequested(1))
 		if err != nil {
 			log.Printf("arcjet protect error (fail-open): %v", err)
 			c.Next()
@@ -74,6 +82,15 @@ func protectWith(client *arcjet.Client) gin.HandlerFunc {
 		// Surface RateLimit-* response headers regardless of decision so
 		// well-behaved clients can self-throttle before hitting 429.
 		arcjet.SetRateLimitHeaders(c.Writer, decision)
+
+		// ERROR conclusions mean Arcjet couldn't evaluate the rules (bad
+		// config, transient upstream issue, etc.). Log loudly and fail open
+		// rather than swallow it like a normal allow.
+		if decision.IsErrored() {
+			log.Printf("arcjet decision errored (fail-open): id=%s reason=%s", decision.ID, decision.Reason.Message)
+			c.Next()
+			return
+		}
 
 		if !decision.IsDenied() {
 			c.Next()
