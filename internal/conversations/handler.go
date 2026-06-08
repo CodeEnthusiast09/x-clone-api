@@ -1,6 +1,8 @@
 package conversations
 
 import (
+	"errors"
+
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/gin-gonic/gin"
@@ -43,6 +45,10 @@ func (h *Handler) StartOrGet(c *gin.Context) {
 
 	conv, err := h.svc.GetOrCreate(clerkID, in.RecipientID)
 	if err != nil {
+		if errors.Is(err, ErrRecipientNotFound) {
+			common.Error(c, 404, "recipient not found")
+			return
+		}
 		common.Error(c, 500, "failed to get or create conversation")
 		return
 	}

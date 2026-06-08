@@ -9,8 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrUserNotSynced is returned when a clerkID has no matching user row yet.
-var ErrUserNotSynced = errors.New("user not synced")
+var (
+	ErrUserNotSynced    = errors.New("user not synced")
+	ErrRecipientNotFound = errors.New("recipient not found")
+)
 
 // ConversationView is the enriched shape returned by ListForUser — includes the
 // most recent message and the caller's unread count.
@@ -34,6 +36,14 @@ func NewService(db *gorm.DB) *Service {
 func (s *Service) GetOrCreate(callerClerkID string, recipientID uuid.UUID) (*models.Conversation, error) {
 	callerID, err := s.userIDFromClerk(callerClerkID)
 	if err != nil {
+		return nil, err
+	}
+
+	var recipientCheck models.User
+	if err := s.db.Select("id").Where("id = ?", recipientID).First(&recipientCheck).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrRecipientNotFound
+		}
 		return nil, err
 	}
 
