@@ -47,6 +47,8 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	users.RegisterProtected(protected, db)
 	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, cfg.PostImageMaxBytes, posts.PostImageNamespace)
 	posts.RegisterProtected(protected, db, cdn)
+	comments.RegisterUnderPosts(protected, db)
+	comments.RegisterProtected(protected, db)
 
 	return r
 }
