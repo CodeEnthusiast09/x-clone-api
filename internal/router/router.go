@@ -1,6 +1,7 @@
 package router
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -23,10 +24,16 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	ajClient, err := middleware.NewArcjetClient(cfg.ArcjetKey, cfg.Env)
+	if err != nil {
+		log.Fatalf("arcjet client init: %v", err)
+	}
+
 	r := gin.Default()
 
 	startedAt := time.Now()
 
+	// /health stays outside the Arcjet chain so liveness probes always pass.
 	r.GET("/health", func(c *gin.Context) {
 		common.Success(c, http.StatusOK, "ok", gin.H{
 			"uptime":      time.Since(startedAt).String(),
@@ -36,15 +43,24 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 
 	api := r.Group("/api")
 
-	// Public routes — read endpoints and webhooks (webhook auth happens via Svix signature).
-	users.Register(api, db)
-	posts.Register(api, db)
-	posts.RegisterUnderUsers(api, db)
-	comments.Register(api, db)
+	// Webhooks are NOT behind Arcjet -- Svix verifies the signature itself,
+	// and we want Clerk's high-volume callbacks to never trip rate limits or
+	// bot heuristics. Mount before the Arcjet-protected sub-group so this
+	// group inherits no Arcjet middleware.
 	webhooks.Register(api, db, cfg.ClerkWebhookSecret)
 
-	// Protected routes — require a valid Clerk JWT.
-	protected := api.Group("", middleware.RequireAuth())
+	// Everything else flows through Arcjet first.
+	guarded := api.Group("", middleware.Arcjet(ajClient))
+
+	// Public routes — read endpoints, no Clerk auth.
+	users.Register(guarded, db)
+	posts.Register(guarded, db)
+	posts.RegisterUnderUsers(guarded, db)
+	comments.Register(guarded, db)
+
+	// Protected routes — require a valid Clerk JWT. Arcjet middleware
+	// inherited from the parent guarded group runs before RequireAuth.
+	protected := guarded.Group("", middleware.RequireAuth())
 	users.RegisterProtected(protected, db)
 	uploadsignatures.RegisterProtected(protected, cdn, cfg.CloudinaryUploadPreset, []uploadsignatures.Mount{
 		{Path: "/upload-signatures/posts", Namespace: posts.PostImageNamespace, MaxBytes: cfg.PostImageMaxBytes},
