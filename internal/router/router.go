@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/chat"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/comments"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
@@ -21,7 +22,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
+func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -91,6 +92,7 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client) *gin.Engine {
 	follows.RegisterProtected(authedWrites, db)
 	conversations.RegisterProtected(authedWrites, db)
 	messages.RegisterProtected(authedWrites, db)
+	chat.Register(authedWrites, hub, db, cfg.Env, cfg.WebSocketAllowedOrigins)
 
 	return r
 }

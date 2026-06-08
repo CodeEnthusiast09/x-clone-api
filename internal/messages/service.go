@@ -18,8 +18,11 @@ func NewService(db *gorm.DB) *Service {
 }
 
 // Create inserts a new message and returns it with the Sender preloaded.
-// senderID is a DB UUID (supplied by the WebSocket handler after resolving clerkID).
-func (s *Service) Create(conversationID, senderID uuid.UUID, body string) (*models.Message, error) {
+func (s *Service) Create(conversationID uuid.UUID, senderClerkID, body string) (*models.Message, error) {
+	senderID, err := s.userIDFromClerk(senderClerkID)
+	if err != nil {
+		return nil, err
+	}
 	msg := models.Message{
 		ConversationID: conversationID,
 		SenderID:       senderID,

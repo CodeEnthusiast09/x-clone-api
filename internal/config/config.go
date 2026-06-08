@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -30,6 +31,12 @@ type Config struct {
 	ArcjetPublicRPM int
 	ArcjetAuthRPM   int
 	ArcjetWriteRPM  int
+
+	// WebSocketAllowedOrigins is the set of web origins allowed to upgrade to
+	// WebSocket. Native mobile clients omit Origin entirely and always pass.
+	// Empty in dev (all origins allowed); set to your web domain(s) in prod.
+	// Parsed from WEBSOCKET_ALLOWED_ORIGINS (comma-separated).
+	WebSocketAllowedOrigins map[string]bool
 }
 
 func Load() *Config {
@@ -54,9 +61,23 @@ func Load() *Config {
 		ArcjetPublicRPM:        mustGetInt("ARCJET_PUBLIC_RPM"),
 		ArcjetAuthRPM:          mustGetInt("ARCJET_AUTH_RPM"),
 		ArcjetWriteRPM:         mustGetInt("ARCJET_WRITE_RPM"),
+		WebSocketAllowedOrigins: parseOrigins(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS")),
 	}
 
 	return cfg
+}
+
+// parseOrigins splits a comma-separated list of origins into a set.
+// Returns an empty map (not nil) when the input is blank.
+func parseOrigins(raw string) map[string]bool {
+	set := make(map[string]bool)
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			set[o] = true
+		}
+	}
+	return set
 }
 
 func mustGetInt64(key string) int64 {

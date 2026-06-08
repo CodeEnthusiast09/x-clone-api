@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CodeEnthusiast09/x-clone-api/internal/chat"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/config"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/db"
@@ -30,7 +31,10 @@ func main() {
 		cfg.CloudinaryAPISecret,
 	)
 
-	r := router.New(cfg, gormDB, cdn)
+	hub := chat.NewHub()
+	go hub.Run()
+
+	r := router.New(cfg, gormDB, cdn, hub)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

@@ -7,6 +7,7 @@ require (
 	github.com/clerk/clerk-sdk-go/v2 v2.6.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/svix/svix-webhooks v1.95.1
 	gorm.io/driver/postgres v1.6.0
