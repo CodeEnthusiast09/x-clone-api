@@ -84,10 +84,12 @@ internal/
 ├── users/                   user reads + /me + /auth/sync
 ├── posts/                   post CRUD + likes/unlikes
 ├── comments/                comment reads (writes come in Phase 3c)
-├── uploadsignatures/        POST /api/upload-signatures
+├── uploadsignatures/        POST /api/upload-signatures/{posts,banners}
+├── follows/                 follow/unfollow toggle
 └── webhooks/                POST /api/webhooks/clerk (Svix-verified)
 scripts/
-└── test-phase-3b.sh         e2e test runner — mints JWT via Clerk Backend API, hits all endpoints
+├── test-phase-3b.sh         e2e tests for Phase 3b (post writes + Cloudinary)
+└── test-phase-3c.sh         e2e tests for Phase 3c (comments, profile, banners, follows)
 ```
 
 Each feature folder has the same three-file shape: `service.go` (DB + business logic), `handler.go` (HTTP layer), `routes.go` (registration).
@@ -123,6 +125,8 @@ Each feature folder has the same three-file shape: `service.go` (DB + business l
 | `DELETE` | `/api/posts/:postId/likes` | unlike (idempotent, 204) |
 | `POST`   | `/api/posts/:postId/comments` | create a comment (text only, <=280 chars) |
 | `DELETE` | `/api/comments/:commentId` | delete a comment (single-query ownership) |
+| `POST`   | `/api/users/:username/follow` | follow another user (idempotent, 204, 400 on self) |
+| `DELETE` | `/api/users/:username/follow` | unfollow another user (idempotent, 204) |
 
 ### Response envelope
 
@@ -173,26 +177,29 @@ Gin uses a strict radix tree. Two rules:
 
 ## Testing
 
-There's no Go test suite yet. End-to-end testing is a bash script at `scripts/test-phase-3b.sh`. It:
+There's no Go test suite yet. End-to-end tests are per-phase bash scripts under `scripts/`. Each one:
 
-1. Reads `CLERK_SECRET_KEY` from `.env`
+1. Reads `CLERK_SECRET_KEY` (and `DATABASE_URL` for the 3c script) from `.env`
 2. Queries Clerk Backend API for the test user's active session
 3. Mints a fresh JWT for that session
-4. Hits all the Phase 3b endpoints (positive + negative paths + IDOR check) using that JWT
+4. Hits the endpoints for that phase (positive + negative paths + security checks)
 
 Because mint + run happens locally (sub-second), Clerk's default 60-second JWT is plenty.
 
 To run:
 
 ```bash
-chmod +x scripts/test-phase-3b.sh
+chmod +x scripts/test-phase-3b.sh scripts/test-phase-3c.sh
 ./scripts/test-phase-3b.sh
+./scripts/test-phase-3c.sh
 ```
+
+`test-phase-3c.sh` additionally uses `psql` (and so `DATABASE_URL`) to seed and clean up a synthetic second user for the follow tests, since we can't easily spin up a real second Clerk identity per run.
 
 To test against a different Clerk user without editing the script:
 
 ```bash
-CLERK_USER_ID=user_xxx ./scripts/test-phase-3b.sh
+CLERK_USER_ID=user_xxx ./scripts/test-phase-3c.sh
 ```
 
 If there's no active session, open Clerk dashboard → click the test user → **Actions** → **Impersonate user** once to spawn one.
@@ -206,7 +213,7 @@ If there's no active session, open Clerk dashboard → click the test user → *
 - ✅ (3a) Clerk auth + webhooks + `/me` + `/sync` — `f04656f`
 - ✅ refactor: nest user-scoped post reads — `2a12164`
 - ✅ (3b) Cloudinary + post writes + IDOR-safe owner-scoped paths — `c97a910`
-- ⬜ (3c) Comment writes + profile update + follow toggle
+- ✅ (3c) Comment writes + profile update + banner uploads + follow toggle
 - ⬜ (4) Arcjet middleware (rate limit + bot detection)
 - ⬜ (5) WebSocket chat (new feature vs the original — `gorilla/websocket`)
 - ⬜ (6) Mobile scaffold (separate repo: `x-clone-expo` — Expo SDK 54+, NativeWind, Yarn)
