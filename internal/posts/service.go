@@ -32,6 +32,14 @@ func expectedImagePrefix(clerkID string) string {
 	return PostImageNamespace + "/" + clerkID + "/"
 }
 
+// PostView is the feed-list shape: the full Post plus pre-computed counts so
+// the client doesn't have to count array lengths from partially-loaded relations.
+type PostView struct {
+	models.Post
+	LikesCount    int64 `json:"likesCount"`
+	CommentsCount int64 `json:"commentsCount"`
+}
+
 type Service struct {
 	db *gorm.DB
 }
@@ -40,9 +48,9 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) List(page, limit int) ([]models.Post, int64, error) {
+func (s *Service) List(page, limit int) ([]PostView, int64, error) {
 	var (
-		out   []models.Post
+		out   []PostView
 		total int64
 	)
 
@@ -51,9 +59,12 @@ func (s *Service) List(page, limit int) ([]models.Post, int64, error) {
 	}
 
 	offset := (page - 1) * limit
-	err := s.db.
+	err := s.db.Model(&models.Post{}).
+		Select(`posts.*,
+			(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
+			(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`).
 		Preload("User").
-		Order("created_at DESC").
+		Order("posts.created_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&out).Error
@@ -203,7 +214,7 @@ func (s *Service) ensurePostExists(postID uuid.UUID) error {
 	return nil
 }
 
-func (s *Service) ListByUsername(username string, page, limit int) ([]models.Post, int64, error) {
+func (s *Service) ListByUsername(username string, page, limit int) ([]PostView, int64, error) {
 	var user models.User
 	err := s.db.Select("id").Where("username = ?", username).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -214,7 +225,7 @@ func (s *Service) ListByUsername(username string, page, limit int) ([]models.Pos
 	}
 
 	var (
-		out   []models.Post
+		out   []PostView
 		total int64
 	)
 
@@ -223,10 +234,13 @@ func (s *Service) ListByUsername(username string, page, limit int) ([]models.Pos
 	}
 
 	offset := (page - 1) * limit
-	err = s.db.
+	err = s.db.Model(&models.Post{}).
+		Select(`posts.*,
+			(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
+			(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`).
 		Preload("User").
-		Where("user_id = ?", user.ID).
-		Order("created_at DESC").
+		Where("posts.user_id = ?", user.ID).
+		Order("posts.created_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&out).Error
