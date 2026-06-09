@@ -6,6 +6,7 @@ import (
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/cloudinary"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/notifications"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -194,10 +195,18 @@ func (s *Service) Like(clerkID string, postID uuid.UUID) error {
 		return err
 	}
 
-	return s.db.Exec(
+	if err := s.db.Exec(
 		"INSERT INTO post_likes (post_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
 		postID, userID,
-	).Error
+	).Error; err != nil {
+		return err
+	}
+
+	var post models.Post
+	if err := s.db.Select("user_id").First(&post, "id = ?", postID).Error; err == nil {
+		notifications.Create(s.db, post.UserID, userID, "like", &postID)
+	}
+	return nil
 }
 
 // Unlike removes the caller from a post's likers. Idempotent: unliking an unliked post is a no-op.

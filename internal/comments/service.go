@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/notifications"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -98,6 +99,12 @@ func (s *Service) Create(clerkID string, postID uuid.UUID, content string) (*mod
 	if err := s.db.Preload("User").First(&out, "id = ?", cm.ID).Error; err != nil {
 		return nil, err
 	}
+
+	var post models.Post
+	if err := s.db.Select("user_id").First(&post, "id = ?", postID).Error; err == nil {
+		notifications.Create(s.db, post.UserID, userID, "comment", &postID)
+	}
+
 	return &out, nil
 }
 

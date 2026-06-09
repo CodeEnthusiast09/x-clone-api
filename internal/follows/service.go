@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/notifications"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -60,10 +61,14 @@ func (s *Service) Follow(clerkID, username string) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Exec(
+	if err := s.db.Exec(
 		"INSERT INTO user_followers (user_id, follower_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
 		targetID, meID,
-	).Error
+	).Error; err != nil {
+		return err
+	}
+	notifications.Create(s.db, targetID, meID, "follow", nil)
+	return nil
 }
 
 // Unfollow removes the follow relationship. Idempotent: unfollowing a user

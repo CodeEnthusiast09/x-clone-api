@@ -43,6 +43,7 @@ func Migrate(gormDB *gorm.DB) {
 		&models.Comment{},
 		&models.Conversation{},
 		&models.Message{},
+		&models.Notification{},
 	); err != nil {
 		log.Fatalf("auto-migrate failed: %v", err)
 	}

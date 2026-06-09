@@ -14,6 +14,7 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/follows"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/messages"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/notifications"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/posts"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/search"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/uploadsignatures"
@@ -81,6 +82,7 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub)
 	posts.RegisterUnderUsers(authedReads, db)
 	conversations.Register(authedReads, db)
 	messages.Register(authedReads, db)
+	notifications.Register(authedReads, db)
 
 	// Authed writes — every mutation goes here. Lowest budget.
 	authedWrites := api.Group("", writeLimit, middleware.RequireAuth())
@@ -92,6 +94,7 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub)
 	comments.RegisterUnderPosts(authedWrites, db)
 	comments.RegisterProtected(authedWrites, db)
 	follows.RegisterProtected(authedWrites, db)
+	notifications.RegisterProtected(authedWrites, db)
 	conversations.RegisterProtected(authedWrites, db)
 	messages.RegisterProtected(authedWrites, db)
 	chat.Register(authedWrites, hub, db, cfg.Env, cfg.WebSocketAllowedOrigins)
