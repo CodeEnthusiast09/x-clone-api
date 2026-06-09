@@ -44,6 +44,7 @@ func Migrate(gormDB *gorm.DB) {
 		&models.Conversation{},
 		&models.Message{},
 		&models.Notification{},
+		&models.PushToken{},
 	); err != nil {
 		log.Fatalf("auto-migrate failed: %v", err)
 	}

@@ -55,6 +55,56 @@ func (h *Handler) List(c *gin.Context) {
 	})
 }
 
+type pushTokenInput struct {
+	Token string `json:"token" binding:"required"`
+}
+
+func (h *Handler) RegisterPushToken(c *gin.Context) {
+	clerkID := c.GetString(middleware.ContextClerkID)
+	userID, err := h.svc.userIDFromClerk(clerkID)
+	if err != nil {
+		common.Error(c, http.StatusUnauthorized, "user not synced")
+		return
+	}
+
+	var in pushTokenInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		common.Error(c, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	if err := h.svc.UpsertPushToken(userID, in.Token); err != nil {
+		log.Printf("notifications.RegisterPushToken: %v", err)
+		common.Error(c, http.StatusInternalServerError, "failed to register push token")
+		return
+	}
+
+	common.Success(c, http.StatusOK, "push token registered", nil)
+}
+
+func (h *Handler) UnregisterPushToken(c *gin.Context) {
+	clerkID := c.GetString(middleware.ContextClerkID)
+	userID, err := h.svc.userIDFromClerk(clerkID)
+	if err != nil {
+		common.Error(c, http.StatusUnauthorized, "user not synced")
+		return
+	}
+
+	token := c.Query("token")
+	if token == "" {
+		common.Error(c, http.StatusBadRequest, "token is required")
+		return
+	}
+
+	if err := h.svc.DeletePushToken(userID, token); err != nil {
+		log.Printf("notifications.UnregisterPushToken: %v", err)
+		common.Error(c, http.StatusInternalServerError, "failed to unregister push token")
+		return
+	}
+
+	common.Success(c, http.StatusOK, "push token removed", nil)
+}
+
 func (h *Handler) MarkAllRead(c *gin.Context) {
 	clerkID := c.GetString(middleware.ContextClerkID)
 	recipientID, err := h.svc.userIDFromClerk(clerkID)
