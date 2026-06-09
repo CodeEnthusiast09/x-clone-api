@@ -15,6 +15,7 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/messages"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/posts"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/search"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/uploadsignatures"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/users"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/webhooks"
@@ -73,6 +74,7 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub)
 	posts.Register(publicReads, db)
 	posts.RegisterUnderUsers(publicReads, db)
 	comments.Register(publicReads, db)
+	search.Register(publicReads, db)
 
 	// Authed reads / lightweight profile actions — require Clerk JWT.
 	authedReads := api.Group("", authLimit, middleware.RequireAuth())
