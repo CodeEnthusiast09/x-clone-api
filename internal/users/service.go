@@ -10,6 +10,7 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
 	"github.com/clerk/clerk-sdk-go/v2"
 	clerkuser "github.com/clerk/clerk-sdk-go/v2/user"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -39,6 +40,63 @@ type Service struct {
 
 func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
+}
+
+// UserProfile extends models.User with social counts and caller-relative state.
+type UserProfile struct {
+	models.User
+	FollowersCount     int64 `json:"followersCount"`
+	FollowingCount     int64 `json:"followingCount"`
+	IsFollowedByCaller bool  `json:"isFollowedByCurrentUser"`
+}
+
+// callerID resolves a Clerk ID string to its DB UUID. Returns uuid.Nil on any failure.
+func (s *Service) callerID(clerkID string) uuid.UUID {
+	if clerkID == "" {
+		return uuid.Nil
+	}
+	var u models.User
+	if err := s.db.Select("id").Where("clerk_id = ?", clerkID).First(&u).Error; err != nil {
+		return uuid.Nil
+	}
+	return u.ID
+}
+
+// GetProfile returns the full profile for the given username including social counts
+// and whether the caller follows the target user.
+func (s *Service) GetProfile(callerID uuid.UUID, username string) (*UserProfile, error) {
+	type result struct {
+		models.User
+		FollowersCount     int64 `gorm:"column:followers_count"`
+		FollowingCount     int64 `gorm:"column:following_count"`
+		IsFollowedByCaller bool  `gorm:"column:is_followed_by_caller"`
+	}
+
+	var row result
+
+	q := s.db.Model(&models.User{}).
+		Select(`users.*,
+			(SELECT COUNT(*) FROM user_followers WHERE user_id = users.id) AS followers_count,
+			(SELECT COUNT(*) FROM user_followers WHERE follower_id = users.id) AS following_count,
+			EXISTS(SELECT 1 FROM user_followers WHERE user_id = users.id AND follower_id = ?) AS is_followed_by_caller`,
+			callerID,
+		).
+		Where("users.username = ?", username).
+		First(&row)
+
+	if errors.Is(q.Error, gorm.ErrRecordNotFound) {
+		return nil, ErrUserNotFound
+	}
+	if q.Error != nil {
+		return nil, q.Error
+	}
+
+	return &UserProfile{
+		User:               row.User,
+		FollowersCount:     row.FollowersCount,
+		FollowingCount:     row.FollowingCount,
+		IsFollowedByCaller: row.IsFollowedByCaller,
+	}, nil
 }
 
 func (s *Service) GetByUsername(username string) (*models.User, error) {

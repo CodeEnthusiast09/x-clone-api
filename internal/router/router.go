@@ -70,12 +70,12 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub)
 
 	// Public reads — unauthenticated GETs. Highest budget.
 	publicReads := api.Group("", publicLimit)
-	users.Register(publicReads, db)
 	comments.Register(publicReads, db)
 	search.Register(publicReads, db)
 
 	// Authed reads / lightweight profile actions — require Clerk JWT.
 	authedReads := api.Group("", authLimit, middleware.RequireAuth())
+	users.Register(authedReads, db)
 	users.RegisterProtected(authedReads, db)
 	posts.Register(authedReads, db)
 	posts.RegisterUnderUsers(authedReads, db)

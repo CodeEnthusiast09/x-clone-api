@@ -25,7 +25,9 @@ func (h *Handler) GetByUsername(c *gin.Context) {
 		return
 	}
 
-	user, err := h.svc.GetByUsername(username)
+	callerID := h.svc.callerID(c.GetString(middleware.ContextClerkID))
+
+	profile, err := h.svc.GetProfile(callerID, username)
 	if errors.Is(err, ErrUserNotFound) {
 		common.Error(c, http.StatusNotFound, "user not found")
 		return
@@ -36,7 +38,7 @@ func (h *Handler) GetByUsername(c *gin.Context) {
 		return
 	}
 
-	common.Success(c, http.StatusOK, "user fetched", user)
+	common.Success(c, http.StatusOK, "user fetched", profile)
 }
 
 // Me returns the currently-authenticated user's record from our DB.
