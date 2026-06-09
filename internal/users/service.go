@@ -15,23 +15,25 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// BannerImageNamespace is the public_id prefix under which all user-banner uploads
-// must be stored. Combined with the uploader's clerkID, it forms an owner-scoped
-// path (e.g. "x_clone/banners/users/user_abc/<uuid>") that PATCH /me validates
-// against — same defense-in-depth pattern used for post images.
+// BannerImageNamespace is the public_id prefix for user banner uploads.
 const BannerImageNamespace = "x_clone/banners/users"
 
+// ProfilePictureNamespace is the public_id prefix for user avatar uploads.
+const ProfilePictureNamespace = "x_clone/avatars/users"
+
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrEmptyUpdate       = errors.New("at least one field must be provided")
-	ErrInvalidBannerURL  = errors.New("banner URL must be a Cloudinary asset uploaded by the caller")
+	ErrUserNotFound           = errors.New("user not found")
+	ErrEmptyUpdate            = errors.New("at least one field must be provided")
+	ErrInvalidBannerURL       = errors.New("banner URL must be a Cloudinary asset uploaded by the caller")
+	ErrInvalidProfileImageURL = errors.New("profile picture URL must be a Cloudinary asset uploaded by the caller")
 )
 
-// expectedBannerPrefix returns the public_id prefix that identifies banner
-// images uploaded by the given clerkID. Used to validate the bannerImage URL
-// on PATCH /me before persisting it.
 func expectedBannerPrefix(clerkID string) string {
 	return BannerImageNamespace + "/" + clerkID + "/"
+}
+
+func expectedAvatarPrefix(clerkID string) string {
+	return ProfilePictureNamespace + "/" + clerkID + "/"
 }
 
 type Service struct {
@@ -157,11 +159,12 @@ func (s *Service) UpsertFromClerk(clerkID, email, firstName, lastName, profilePi
 // UpdateProfileInput is the partial-update payload for PATCH /me. Pointer fields
 // distinguish "not provided" (nil) from "explicitly cleared" (pointer to "").
 type UpdateProfileInput struct {
-	FirstName   *string
-	LastName    *string
-	Bio         *string
-	Location    *string
-	BannerImage *string
+	FirstName      *string
+	LastName       *string
+	Bio            *string
+	Location       *string
+	BannerImage    *string
+	ProfilePicture *string
 }
 
 // UpdateProfile applies a partial update to the authenticated user's row.
@@ -192,6 +195,16 @@ func (s *Service) UpdateProfile(clerkID string, in UpdateProfileInput) (*models.
 			}
 		}
 		updates["banner_image"] = url
+	}
+	if in.ProfilePicture != nil {
+		url := strings.TrimSpace(*in.ProfilePicture)
+		if url != "" {
+			publicID := cloudinary.PublicIDFromURL(url)
+			if publicID == "" || !strings.HasPrefix(publicID, expectedAvatarPrefix(clerkID)) {
+				return nil, ErrInvalidProfileImageURL
+			}
+		}
+		updates["profile_picture"] = url
 	}
 
 	if len(updates) == 0 {

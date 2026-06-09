@@ -26,6 +26,7 @@ type Config struct {
 
 	PostImageMaxBytes   int64
 	BannerImageMaxBytes int64
+	AvatarImageMaxBytes int64
 
 	ArcjetKey       string
 	ArcjetPublicRPM int
@@ -57,6 +58,7 @@ func Load() *Config {
 		CloudinaryUploadPreset: mustGet("CLOUDINARY_UPLOAD_PRESET"),
 		PostImageMaxBytes:      mustGetInt64("POST_IMAGE_MAX_BYTES"),
 		BannerImageMaxBytes:    mustGetInt64("BANNER_IMAGE_MAX_BYTES"),
+		AvatarImageMaxBytes:    mustGetInt64("AVATAR_IMAGE_MAX_BYTES"),
 		ArcjetKey:              mustGet("ARCJET_KEY"),
 		ArcjetPublicRPM:        mustGetInt("ARCJET_PUBLIC_RPM"),
 		ArcjetAuthRPM:          mustGetInt("ARCJET_AUTH_RPM"),

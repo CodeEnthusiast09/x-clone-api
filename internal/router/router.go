@@ -89,6 +89,7 @@ func New(cfg *config.Config, db *gorm.DB, cdn *cloudinary.Client, hub *chat.Hub)
 	uploadsignatures.RegisterProtected(authedWrites, cdn, cfg.CloudinaryUploadPreset, []uploadsignatures.Mount{
 		{Path: "/upload-signatures/posts", Namespace: posts.PostImageNamespace, MaxBytes: cfg.PostImageMaxBytes},
 		{Path: "/upload-signatures/banners", Namespace: users.BannerImageNamespace, MaxBytes: cfg.BannerImageMaxBytes},
+		{Path: "/upload-signatures/avatars", Namespace: users.ProfilePictureNamespace, MaxBytes: cfg.AvatarImageMaxBytes},
 	})
 	posts.RegisterProtected(authedWrites, db, cdn)
 	comments.RegisterUnderPosts(authedWrites, db)

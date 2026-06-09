@@ -65,11 +65,12 @@ func (h *Handler) Me(c *gin.Context) {
 }
 
 type updateMeInput struct {
-	FirstName   *string `json:"firstName"   binding:"omitempty,max=100"`
-	LastName    *string `json:"lastName"    binding:"omitempty,max=100"`
-	Bio         *string `json:"bio"         binding:"omitempty,max=160"`
-	Location    *string `json:"location"    binding:"omitempty,max=100"`
-	BannerImage *string `json:"bannerImage" binding:"omitempty,max=2048"`
+	FirstName      *string `json:"firstName"      binding:"omitempty,max=100"`
+	LastName       *string `json:"lastName"       binding:"omitempty,max=100"`
+	Bio            *string `json:"bio"            binding:"omitempty,max=160"`
+	Location       *string `json:"location"       binding:"omitempty,max=100"`
+	BannerImage    *string `json:"bannerImage"    binding:"omitempty,max=2048"`
+	ProfilePicture *string `json:"profilePicture" binding:"omitempty,max=2048"`
 }
 
 // UpdateMe applies a partial update to the authenticated user's profile.
@@ -94,6 +95,10 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	}
 	if errors.Is(err, ErrInvalidBannerURL) {
 		common.Error(c, http.StatusBadRequest, "banner URL must come from your own /upload-signatures/banners call")
+		return
+	}
+	if errors.Is(err, ErrInvalidProfileImageURL) {
+		common.Error(c, http.StatusBadRequest, "profile picture URL must come from your own /upload-signatures/avatars call")
 		return
 	}
 	if errors.Is(err, ErrUserNotFound) {
