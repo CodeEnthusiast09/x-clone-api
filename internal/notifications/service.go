@@ -89,7 +89,7 @@ func (s *Service) UpsertPushToken(userID uuid.UUID, token string) error {
 	return s.db.Exec(
 		`INSERT INTO push_tokens (id, user_id, token, created_at, updated_at)
 		 VALUES (gen_random_uuid(), ?, ?, NOW(), NOW())
-		 ON CONFLICT (token) DO UPDATE SET user_id = excluded.user_id, updated_at = NOW()`,
+		 ON CONFLICT (user_id, token) DO UPDATE SET updated_at = NOW()`,
 		userID, token,
 	).Error
 }

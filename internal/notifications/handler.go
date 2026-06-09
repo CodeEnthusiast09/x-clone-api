@@ -90,13 +90,13 @@ func (h *Handler) UnregisterPushToken(c *gin.Context) {
 		return
 	}
 
-	token := c.Query("token")
-	if token == "" {
+	var in pushTokenInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		common.Error(c, http.StatusBadRequest, "token is required")
 		return
 	}
 
-	if err := h.svc.DeletePushToken(userID, token); err != nil {
+	if err := h.svc.DeletePushToken(userID, in.Token); err != nil {
 		log.Printf("notifications.UnregisterPushToken: %v", err)
 		common.Error(c, http.StatusInternalServerError, "failed to unregister push token")
 		return

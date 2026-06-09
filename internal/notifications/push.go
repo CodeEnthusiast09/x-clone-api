@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
 	"github.com/google/uuid"
@@ -13,6 +14,8 @@ import (
 )
 
 const expoPushURL = "https://exp.host/--/api/v2/push/send"
+
+var pushHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 type expoPushMessage struct {
 	To    string            `json:"to"`
@@ -82,7 +85,14 @@ func SendPush(db *gorm.DB, recipientID, actorID uuid.UUID, nType string, postID 
 		return
 	}
 
-	resp, err := http.Post(expoPushURL, "application/json", bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, expoPushURL, bytes.NewReader(payload))
+	if err != nil {
+		log.Printf("notifications.SendPush: create request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := pushHTTPClient.Do(req)
 	if err != nil {
 		log.Printf("notifications.SendPush: http post: %v", err)
 		return
