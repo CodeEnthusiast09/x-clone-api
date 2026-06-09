@@ -32,12 +32,28 @@ func expectedImagePrefix(clerkID string) string {
 	return PostImageNamespace + "/" + clerkID + "/"
 }
 
-// PostView is the feed-list shape: the full Post plus pre-computed counts so
-// the client doesn't have to count array lengths from partially-loaded relations.
+// PostView is the feed-list shape: the full Post plus pre-computed counts and
+// a per-caller liked flag so the client can render interactive like buttons.
 type PostView struct {
 	models.Post
-	LikesCount    int64 `json:"likesCount"`
-	CommentsCount int64 `json:"commentsCount"`
+	LikesCount      int64 `json:"likesCount"`
+	CommentsCount   int64 `json:"commentsCount"`
+	IsLikedByCaller bool  `json:"isLikedByCurrentUser"`
+}
+
+// feedCols builds the SELECT clause for feed queries.
+// When callerID is not nil the clause includes a correlated EXISTS subquery
+// that tells the client whether the caller has already liked each post.
+func feedCols(callerID uuid.UUID) (string, []any) {
+	base := `posts.*,
+		(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
+		(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`
+	if callerID != uuid.Nil {
+		return base + `,
+		EXISTS(SELECT 1 FROM post_likes WHERE post_id = posts.id AND user_id = ?) AS is_liked_by_caller`,
+			[]any{callerID}
+	}
+	return base + `, false AS is_liked_by_caller`, nil
 }
 
 type Service struct {
@@ -48,7 +64,7 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) List(page, limit int) ([]PostView, int64, error) {
+func (s *Service) List(callerID uuid.UUID, page, limit int) ([]PostView, int64, error) {
 	var (
 		out   []PostView
 		total int64
@@ -58,11 +74,10 @@ func (s *Service) List(page, limit int) ([]PostView, int64, error) {
 		return nil, 0, err
 	}
 
+	cols, args := feedCols(callerID)
 	offset := (page - 1) * limit
 	err := s.db.Model(&models.Post{}).
-		Select(`posts.*,
-			(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
-			(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`).
+		Select(cols, args...).
 		Preload("User").
 		Order("posts.created_at DESC").
 		Limit(limit).
@@ -214,7 +229,7 @@ func (s *Service) ensurePostExists(postID uuid.UUID) error {
 	return nil
 }
 
-func (s *Service) ListByUsername(username string, page, limit int) ([]PostView, int64, error) {
+func (s *Service) ListByUsername(callerID uuid.UUID, username string, page, limit int) ([]PostView, int64, error) {
 	var user models.User
 	err := s.db.Select("id").Where("username = ?", username).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -233,11 +248,10 @@ func (s *Service) ListByUsername(username string, page, limit int) ([]PostView, 
 		return nil, 0, err
 	}
 
+	cols, args := feedCols(callerID)
 	offset := (page - 1) * limit
 	err = s.db.Model(&models.Post{}).
-		Select(`posts.*,
-			(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
-			(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`).
+		Select(cols, args...).
 		Preload("User").
 		Where("posts.user_id = ?", user.ID).
 		Order("posts.created_at DESC").

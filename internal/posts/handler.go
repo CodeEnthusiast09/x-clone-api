@@ -26,9 +26,10 @@ func NewHandler(svc *Service, cdn *cloudinary.Client) *Handler {
 }
 
 func (h *Handler) List(c *gin.Context) {
+	callerID, _ := h.svc.userIDFromClerk(c.GetString(middleware.ContextClerkID))
 	page, limit := parsePagination(c)
 
-	out, total, err := h.svc.List(page, limit)
+	out, total, err := h.svc.List(callerID, page, limit)
 	if err != nil {
 		log.Printf("posts.List: %v", err)
 		common.Error(c, http.StatusInternalServerError, "failed to list posts")
@@ -67,9 +68,10 @@ func (h *Handler) ListByUsername(c *gin.Context) {
 		return
 	}
 
+	callerID, _ := h.svc.userIDFromClerk(c.GetString(middleware.ContextClerkID))
 	page, limit := parsePagination(c)
 
-	out, total, err := h.svc.ListByUsername(username, page, limit)
+	out, total, err := h.svc.ListByUsername(callerID, username, page, limit)
 	if errors.Is(err, ErrUserNotFound) {
 		common.Error(c, http.StatusNotFound, "user not found")
 		return
