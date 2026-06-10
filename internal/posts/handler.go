@@ -216,6 +216,54 @@ func (h *Handler) Unlike(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *Handler) Repost(c *gin.Context) {
+	clerkID, postID, ok := h.authedPostContext(c)
+	if !ok {
+		return
+	}
+
+	err := h.svc.Repost(clerkID, postID)
+	if errors.Is(err, ErrPostNotFound) {
+		common.Error(c, http.StatusNotFound, "post not found")
+		return
+	}
+	if errors.Is(err, ErrUserNotSynced) {
+		common.Error(c, http.StatusConflict, "user not synced; call POST /api/auth/sync first")
+		return
+	}
+	if err != nil {
+		log.Printf("posts.Repost: %v", err)
+		common.Error(c, http.StatusInternalServerError, "failed to repost the post")
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) UnRepost(c *gin.Context) {
+	clerkID, postID, ok := h.authedPostContext(c)
+	if !ok {
+		return
+	}
+
+	err := h.svc.UnRepost(clerkID, postID)
+	if errors.Is(err, ErrPostNotFound) {
+		common.Error(c, http.StatusNotFound, "post not found")
+		return
+	}
+	if errors.Is(err, ErrUserNotSynced) {
+		common.Error(c, http.StatusConflict, "user not synced; call POST /api/auth/sync first")
+		return
+	}
+	if err != nil {
+		log.Printf("posts.UnRepost: %v", err)
+		common.Error(c, http.StatusInternalServerError, "failed to unrepost the post")
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // authedPostContext reads clerkID + :postId from the request. Writes the error
 // response and returns ok=false if either is missing/invalid.
 func (h *Handler) authedPostContext(c *gin.Context) (clerkID string, postID uuid.UUID, ok bool) {

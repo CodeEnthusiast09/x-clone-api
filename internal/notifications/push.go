@@ -45,6 +45,9 @@ func SendPush(db *gorm.DB, recipientID, actorID uuid.UUID, nType string, postID 
 	case "like":
 		title = "New like"
 		body = name + " liked your post"
+	case "repost":
+		title = "New repost"
+		body = name + " reposted your post"
 	case "comment":
 		title = "New comment"
 		body = name + " commented on your post"

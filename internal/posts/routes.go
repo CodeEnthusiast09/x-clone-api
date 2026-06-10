@@ -39,5 +39,7 @@ func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB, cdn *cloudinary.Client)
 		g.DELETE("/:postId", h.Delete)
 		g.POST("/:postId/likes", h.Like)
 		g.DELETE("/:postId/likes", h.Unlike)
+		g.POST("/:postId/repost", h.Repost)
+		g.DELETE("/:postId/repost", h.UnRepost)
 	}
 }

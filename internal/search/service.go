@@ -8,6 +8,7 @@ import (
 type PostResult struct {
 	models.Post
 	LikesCount    int64 `json:"likesCount"`
+	RepostsCount  int64 `json:"repostsCount"`
 	CommentsCount int64 `json:"commentsCount"`
 }
 
@@ -38,6 +39,7 @@ func (s *Service) Search(q string, limit int) (SearchResults, error) {
 	err := s.db.Model(&models.Post{}).
 		Select(`posts.*,
 			(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
+			(SELECT COUNT(*) FROM post_reposts WHERE post_id = posts.id) AS reposts_count,
 			(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`).
 		Preload("User").
 		Where("content ILIKE ?", pattern).

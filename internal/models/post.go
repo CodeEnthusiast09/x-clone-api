@@ -16,6 +16,7 @@ type Post struct {
 	Image   string `gorm:"type:text;default:''"         json:"image"`
 
 	Likes    []*User   `gorm:"many2many:post_likes;"                          json:"likes,omitempty"`
+	Reposts  []*User   `gorm:"many2many:post_reposts;"                          json:"reposts,omitempty"`
 	Comments []Comment `gorm:"foreignKey:PostID;constraint:OnDelete:CASCADE"  json:"comments,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`

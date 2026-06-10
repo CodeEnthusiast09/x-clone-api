@@ -52,8 +52,10 @@ type UploadParams struct {
 // when callers need owner-scoped asset paths for later authorization checks.
 func (c *Client) Sign(uploadPreset string, maxBytes int64, publicID string) *UploadSignature {
 	ts := time.Now().Unix()
+	// Only include params that Cloudinary recognizes — max_bytes is not a Cloudinary
+	// upload API parameter, so including it in the hash causes a signature mismatch.
+	// It is returned in UploadParams for client-side pre-upload size validation only.
 	params := map[string]string{
-		"max_bytes":     fmt.Sprintf("%d", maxBytes),
 		"timestamp":     fmt.Sprintf("%d", ts),
 		"upload_preset": uploadPreset,
 	}

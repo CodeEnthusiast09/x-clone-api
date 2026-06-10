@@ -37,9 +37,11 @@ func expectedImagePrefix(clerkID string) string {
 // a per-caller liked flag so the client can render interactive like buttons.
 type PostView struct {
 	models.Post
-	LikesCount      int64 `json:"likesCount"`
-	CommentsCount   int64 `json:"commentsCount"`
-	IsLikedByCaller bool  `json:"isLikedByCurrentUser"`
+	LikesCount         int64 `json:"likesCount"`
+	RepostsCount       int64 `json:"repostsCount"`
+	CommentsCount      int64 `json:"commentsCount"`
+	IsLikedByCaller    bool  `json:"isLikedByCurrentUser"`
+	IsRepostedByCaller bool  `json:"isRepostedByCurrentUser"`
 }
 
 // feedCols builds the SELECT clause for feed queries.
@@ -48,13 +50,15 @@ type PostView struct {
 func feedCols(callerID uuid.UUID) (string, []any) {
 	base := `posts.*,
 		(SELECT COUNT(*) FROM post_likes WHERE post_id = posts.id) AS likes_count,
+		(SELECT COUNT(*) FROM post_reposts WHERE post_id = posts.id) AS reposts_count,
 		(SELECT COUNT(*) FROM comments  WHERE post_id = posts.id) AS comments_count`
 	if callerID != uuid.Nil {
 		return base + `,
-		EXISTS(SELECT 1 FROM post_likes WHERE post_id = posts.id AND user_id = ?) AS is_liked_by_caller`,
-			[]any{callerID}
+		EXISTS(SELECT 1 FROM post_likes WHERE post_id = posts.id AND user_id = ?) AS is_liked_by_caller,
+		EXISTS(SELECT 1 FROM post_reposts WHERE post_id = posts.id AND user_id = ?) AS is_reposted_by_caller`,
+			[]any{callerID, callerID}
 	}
-	return base + `, false AS is_liked_by_caller`, nil
+	return base + `, false AS is_liked_by_caller, false AS is_reposted_by_caller`, nil
 }
 
 type Service struct {
@@ -223,6 +227,50 @@ func (s *Service) Unlike(clerkID string, postID uuid.UUID) error {
 
 	return s.db.Exec(
 		"DELETE FROM post_likes WHERE post_id = ? AND user_id = ?",
+		postID, userID,
+	).Error
+}
+
+// Repost adds the caller to a post's reposters. Idempotent: re-posting is a no-op.
+// Returns ErrPostNotFound if the post doesn't exist.
+func (s *Service) Repost(clerkID string, postID uuid.UUID) error {
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensurePostExists(postID); err != nil {
+		return err
+	}
+
+	if err := s.db.Exec(
+		"INSERT INTO post_reposts (post_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+		postID, userID,
+	).Error; err != nil {
+		return err
+	}
+
+	var post models.Post
+	if err := s.db.Select("user_id").First(&post, "id = ?", postID).Error; err == nil {
+		notifications.Create(s.db, post.UserID, userID, "repost", &postID)
+	}
+	return nil
+}
+
+// UnRepost removes the caller from a post's reposters. Idempotent: unreposting an unreposted post is a no-op.
+// Returns ErrPostNotFound if the post itself doesn't exist.
+func (s *Service) UnRepost(clerkID string, postID uuid.UUID) error {
+	userID, err := s.userIDFromClerk(clerkID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensurePostExists(postID); err != nil {
+		return err
+	}
+
+	return s.db.Exec(
+		"DELETE FROM post_reposts WHERE post_id = ? AND user_id = ?",
 		postID, userID,
 	).Error
 }
