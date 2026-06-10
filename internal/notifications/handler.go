@@ -105,6 +105,24 @@ func (h *Handler) UnregisterPushToken(c *gin.Context) {
 	common.Success(c, http.StatusOK, "push token removed", nil)
 }
 
+func (h *Handler) UnreadCount(c *gin.Context) {
+	clerkID := c.GetString(middleware.ContextClerkID)
+	recipientID, err := h.svc.userIDFromClerk(clerkID)
+	if err != nil {
+		common.Error(c, http.StatusUnauthorized, "user not synced")
+		return
+	}
+
+	count, err := h.svc.UnreadCount(recipientID)
+	if err != nil {
+		log.Printf("notifications.UnreadCount: %v", err)
+		common.Error(c, http.StatusInternalServerError, "failed to fetch unread count")
+		return
+	}
+
+	common.Success(c, http.StatusOK, "unread count fetched", map[string]int64{"count": count})
+}
+
 func (h *Handler) MarkAllRead(c *gin.Context) {
 	clerkID := c.GetString(middleware.ContextClerkID)
 	recipientID, err := h.svc.userIDFromClerk(clerkID)

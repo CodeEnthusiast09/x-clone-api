@@ -14,6 +14,7 @@ func Register(rg *gin.RouterGroup, db *gorm.DB) {
 func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB) {
 	svc := NewService(db)
 	h := NewHandler(svc)
+	rg.GET("/notifications/unread-count", h.UnreadCount)
 	rg.PATCH("/notifications/read", h.MarkAllRead)
 	rg.POST("/push-token", h.RegisterPushToken)
 	rg.DELETE("/push-token", h.UnregisterPushToken)

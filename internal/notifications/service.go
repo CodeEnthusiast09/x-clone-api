@@ -76,6 +76,14 @@ func (s *Service) List(recipientID uuid.UUID, page, limit int) ([]models.Notific
 	return out, total, err
 }
 
+func (s *Service) UnreadCount(recipientID uuid.UUID) (int64, error) {
+	var count int64
+	err := s.db.Model(&models.Notification{}).
+		Where("recipient_id = ? AND read = false", recipientID).
+		Count(&count).Error
+	return count, err
+}
+
 func (s *Service) MarkAllRead(recipientID uuid.UUID) error {
 	return s.db.Model(&models.Notification{}).
 		Where("recipient_id = ? AND read = false", recipientID).
