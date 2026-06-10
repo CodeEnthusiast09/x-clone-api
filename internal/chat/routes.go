@@ -12,7 +12,7 @@ import (
 func Register(rg *gin.RouterGroup, hub *Hub, db *gorm.DB, env string, allowedOrigins map[string]bool) {
 	msgSvc := messages.NewService(db)
 	convSvc := conversations.NewService(db)
-	h := NewHandler(hub, msgSvc, convSvc, env, allowedOrigins)
+	h := NewHandler(hub, msgSvc, convSvc, db, env, allowedOrigins)
 
 	rg.GET("/conversations/:conversationId/ws", h.ServeWS)
 }

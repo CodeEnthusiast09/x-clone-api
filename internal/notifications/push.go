@@ -54,6 +54,9 @@ func SendPush(db *gorm.DB, recipientID, actorID uuid.UUID, nType string, postID 
 	case "follow":
 		title = "New follower"
 		body = name + " followed you"
+	case "message":
+		title = name
+		body = "Sent you a message"
 	default:
 		return
 	}
@@ -65,6 +68,11 @@ func SendPush(db *gorm.DB, recipientID, actorID uuid.UUID, nType string, postID 
 	}
 	if postID != nil {
 		data["postId"] = postID.String()
+	}
+	if nType == "message" && postID != nil {
+		// postID is reused to carry conversationID for message notifications
+		data["conversationId"] = postID.String()
+		delete(data, "postId")
 	}
 
 	// 3. Fetch recipient's registered push tokens

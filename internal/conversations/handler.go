@@ -2,11 +2,13 @@ package conversations
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/CodeEnthusiast09/x-clone-api/internal/common"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
@@ -54,6 +56,36 @@ func (h *Handler) StartOrGet(c *gin.Context) {
 	}
 
 	common.Success(c, 200, "ok", conv)
+}
+
+// Delete  DELETE /api/conversations/:conversationId
+func (h *Handler) Delete(c *gin.Context) {
+	clerkID := c.GetString(middleware.ContextClerkID)
+	if clerkID == "" {
+		common.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	convID, err := uuid.Parse(c.Param("conversationId"))
+	if err != nil {
+		common.Error(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	if err := h.svc.Delete(clerkID, convID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.Error(c, http.StatusNotFound, "conversation not found or access denied")
+			return
+		}
+		if errors.Is(err, ErrUserNotSynced) {
+			common.Error(c, http.StatusUnauthorized, "user not synced")
+			return
+		}
+		common.Error(c, http.StatusInternalServerError, "failed to delete conversation")
+		return
+	}
+
+	common.Success(c, http.StatusOK, "conversation deleted", nil)
 }
 
 // List  GET /api/conversations

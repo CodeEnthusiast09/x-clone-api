@@ -9,23 +9,28 @@ import (
 	"github.com/CodeEnthusiast09/x-clone-api/internal/conversations"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/messages"
 	"github.com/CodeEnthusiast09/x-clone-api/internal/middleware"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/models"
+	"github.com/CodeEnthusiast09/x-clone-api/internal/notifications"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
-	hub             *Hub
-	msgSvc          *messages.Service
-	convSvc         *conversations.Service
-	upgrader        websocket.Upgrader
+	hub      *Hub
+	msgSvc   *messages.Service
+	convSvc  *conversations.Service
+	db       *gorm.DB
+	upgrader websocket.Upgrader
 }
 
-func NewHandler(hub *Hub, msgSvc *messages.Service, convSvc *conversations.Service, env string, allowedOrigins map[string]bool) *Handler {
+func NewHandler(hub *Hub, msgSvc *messages.Service, convSvc *conversations.Service, db *gorm.DB, env string, allowedOrigins map[string]bool) *Handler {
 	return &Handler{
 		hub:     hub,
 		msgSvc:  msgSvc,
 		convSvc: convSvc,
+		db:      db,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -107,20 +112,58 @@ func (h *Handler) ServeWS(c *gin.Context) {
 
 	go client.WritePump()
 
+	// Determine the push-notification recipient (the participant who is NOT the caller).
+	var recipientID uuid.UUID
+	switch clerkID {
+	case conv.Participant1.ClerkID:
+		recipientID = conv.Participant2ID
+	case conv.Participant2.ClerkID:
+		recipientID = conv.Participant1ID
+	default:
+		// Preload did not populate ClerkID — fall back to a DB lookup.
+		var callerUser models.User
+		if err := h.db.Select("id").Where("clerk_id = ?", clerkID).First(&callerUser).Error; err == nil {
+			if conv.Participant1ID == callerUser.ID {
+				recipientID = conv.Participant2ID
+			} else {
+				recipientID = conv.Participant1ID
+			}
+		}
+	}
+
 	// ReadPump runs in the current goroutine (blocks until disconnect).
-	client.ReadPump(func(body string) {
-		msg, err := h.msgSvc.Create(convID, clerkID, body)
-		if err != nil {
-			log.Printf("ws message persist failed: conv=%s clerk=%s: %v", convID, clerkID, err)
-			return
-		}
-		payload, err := json.Marshal(WSEvent{Type: "message", Data: msg})
-		if err != nil {
-			return
-		}
-		h.hub.broadcast <- &BroadcastMsg{
-			ConversationID: convID.String(),
-			Payload:        payload,
-		}
-	})
+	client.ReadPump(
+		func(body string) {
+			msg, err := h.msgSvc.Create(convID, clerkID, body)
+			if err != nil {
+				log.Printf("ws message persist failed: conv=%s clerk=%s: %v", convID, clerkID, err)
+				return
+			}
+			payload, err := json.Marshal(WSEvent{Type: "message", Data: msg})
+			if err != nil {
+				return
+			}
+			h.hub.broadcast <- &BroadcastMsg{
+				ConversationID: convID.String(),
+				Payload:        payload,
+			}
+			// Push notification to the other participant (fire-and-forget).
+			if recipientID != uuid.Nil {
+				go notifications.SendPush(h.db, recipientID, msg.SenderID, "message", &convID)
+			}
+		},
+		func() {
+			// Broadcast a "typing" event to the other participant(s) in this room.
+			if payload, jsonErr := json.Marshal(WSEvent{
+				Type: "typing",
+				Data: gin.H{"conversationId": convID.String(), "clerkId": clerkID},
+			}); jsonErr == nil {
+				h.hub.broadcast <- &BroadcastMsg{
+					ConversationID: convID.String(),
+					Payload:        payload,
+					Exclude:        client,
+				}
+			}
+		},
+	)
 }

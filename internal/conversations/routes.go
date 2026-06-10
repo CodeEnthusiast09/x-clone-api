@@ -21,4 +21,5 @@ func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB) {
 	h := NewHandler(svc)
 
 	rg.POST("/conversations", h.StartOrGet)
+	rg.DELETE("/conversations/:conversationId", h.Delete)
 }

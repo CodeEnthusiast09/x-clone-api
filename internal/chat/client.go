@@ -24,15 +24,18 @@ type Client struct {
 	send           chan []byte
 }
 
-// inboundMsg is the only message shape accepted from the client.
+// inboundMsg is the shape accepted from the client.
+// Type "message" (or omitted) carries a Body to persist.
+// Type "typing" is a lightweight signal — no body required.
 type inboundMsg struct {
+	Type string `json:"type"`
 	Body string `json:"body"`
 }
 
-// ReadPump pumps messages from the WebSocket to the hub. It calls
-// persistAndBroadcast for every valid inbound message, then exits when the
-// connection closes and unregisters the client.
-func (c *Client) ReadPump(persistAndBroadcast func(body string)) {
+// ReadPump pumps messages from the WebSocket to the hub.
+// onMessage is called for every new chat message to persist and broadcast.
+// onTyping is called when the client sends a typing indicator.
+func (c *Client) ReadPump(onMessage func(body string), onTyping func()) {
 	defer func() {
 		c.hub.unregister <- c
 		c.conn.Close()
@@ -53,10 +56,17 @@ func (c *Client) ReadPump(persistAndBroadcast func(body string)) {
 			break
 		}
 		var in inboundMsg
-		if jsonErr := json.Unmarshal(raw, &in); jsonErr != nil || in.Body == "" {
+		if jsonErr := json.Unmarshal(raw, &in); jsonErr != nil {
 			continue
 		}
-		persistAndBroadcast(in.Body)
+		switch in.Type {
+		case "typing":
+			onTyping()
+		default:
+			if in.Body != "" {
+				onMessage(in.Body)
+			}
+		}
 	}
 }
 

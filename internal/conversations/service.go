@@ -114,6 +114,27 @@ func (s *Service) ListForUser(callerClerkID string) ([]ConversationView, error) 
 	return views, nil
 }
 
+// Delete removes a conversation and all its messages for the caller, provided
+// the caller is a participant. Returns ErrUserNotSynced if the caller is not
+// in the database, or a not-found/forbidden error if they're not a participant.
+func (s *Service) Delete(callerClerkID string, convID uuid.UUID) error {
+	callerID, err := s.userIDFromClerk(callerClerkID)
+	if err != nil {
+		return err
+	}
+
+	result := s.db.
+		Where("id = ? AND (participant1_id = ? OR participant2_id = ?)", convID, callerID, callerID).
+		Delete(&models.Conversation{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // GetByID fetches a single conversation, verifying the caller is a participant.
 // Returns nil (no error) when not found or the caller is not a participant.
 func (s *Service) GetByID(id uuid.UUID, callerClerkID string) (*models.Conversation, error) {
