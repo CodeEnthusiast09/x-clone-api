@@ -21,7 +21,10 @@ const (
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := extractBearerToken(c.GetHeader("Authorization"))
-		if token == "" {
+		if token == "" && c.GetHeader("Upgrade") == "websocket" {
+			// WebSocket upgrade requests cannot set Authorization headers on
+			// some Android RN versions — accept the token as a query param
+			// only for WS handshakes, never for plain HTTP requests.
 			token = c.Query("token")
 		}
 		if token == "" {
