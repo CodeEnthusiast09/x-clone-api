@@ -21,7 +21,13 @@ func RegisterProtected(rg *gin.RouterGroup, db *gorm.DB) {
 	svc := NewService(db)
 	h := NewHandler(svc)
 
-	rg.GET("/me", h.Me)
-	rg.PATCH("/me", h.UpdateMe)
+	// Static /users/me routes must be registered before /users/:username so Gin
+	// matches them as exact paths rather than routing to GetByUsername.
+	g := rg.Group("/users")
+	{
+		g.GET("/me", h.Me)
+		g.PATCH("/me", h.UpdateMe)
+	}
+
 	rg.POST("/auth/sync", h.Sync)
 }

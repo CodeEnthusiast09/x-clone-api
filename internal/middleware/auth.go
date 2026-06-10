@@ -13,11 +13,17 @@ const (
 	ContextClerkID = "clerkID"
 )
 
-// RequireAuth verifies the Clerk-issued JWT on Authorization: Bearer <token>.
+// RequireAuth verifies the Clerk-issued JWT.
+// Primary: Authorization: Bearer <token> header.
+// Fallback: ?token= query parameter — used by WebSocket clients that cannot
+// set request headers during the HTTP upgrade handshake (e.g. Android).
 // On success, the verified clerk_id is stored on the Gin context under ContextClerkID.
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := extractBearerToken(c.GetHeader("Authorization"))
+		if token == "" {
+			token = c.Query("token")
+		}
 		if token == "" {
 			common.Error(c, http.StatusUnauthorized, "missing or malformed authorization header")
 			c.Abort()
